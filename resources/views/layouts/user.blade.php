@@ -20,6 +20,10 @@
         <div id="layoutSidenav_nav">
             @include('layouts.partials1.sidebar')
         </div>
+<<<<<<< HEAD
+=======
+        <div id="layoutSidenav_resize" aria-label="Resize sidebar" title="Drag to resize sidebar"></div>
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 
         <div id="layoutSidenav_content">
             <main>
@@ -35,8 +39,16 @@
 
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+<<<<<<< HEAD
     <script src="{{ asset('admin/js/scripts.css') }}"></script>
     <script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>
     <script src="{{ asset('admin/js/datatables-simple-demo.css') }}"></script>
 </body>
 </html>
+=======
+    <script src="{{ asset('admin/js/scripts.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/simple-datatables@7.1.2/dist/umd/simple-datatables.min.js" crossorigin="anonymous"></script>
+    <script src="{{ asset('admin/js/datatables-simple-demo.js') }}"></script>
+</body>
+</html>
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714

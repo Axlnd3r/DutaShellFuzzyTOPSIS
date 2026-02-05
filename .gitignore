@@ -21,9 +21,12 @@ Homestead.yaml
 Homestead.json
 /.vagrant
 .phpunit.result.cache
+<<<<<<< HEAD
 
 # Local/dev artifacts
 .vscode/
 temp.txt
 baru.sql
 database/expertt.sql
+=======
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714

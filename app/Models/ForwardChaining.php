@@ -40,7 +40,14 @@ class ForwardChaining extends Model
     public function getRules()
     {
         if ($this->tableExists()) {
+<<<<<<< HEAD
             return DB::table($this->table)->get();
+=======
+            return DB::table($this->table)
+                ->orderByDesc('inf_id')
+                ->limit(500)
+                ->get();
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
         } else {
             // Return empty collection if the table doesn't exist
             return collect([]);

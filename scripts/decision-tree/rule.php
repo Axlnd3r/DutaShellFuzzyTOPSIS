@@ -8,7 +8,11 @@ $password = "";
 $dbname = "expertt";
 
 // Create connection
+<<<<<<< HEAD
 $conn = new mysqli($servername, $username, $password, $dbname);
+=======
+$conn = new mysqli($servername, $username, $password, $dbname, 3307);
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 // Check connection
 if ($conn->connect_error) {
   die("Connection failed: " . $conn->connect_error);

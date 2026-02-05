@@ -16,8 +16,13 @@
     @endif
 
     <form action="{{ route('test.case.store') }}" method="POST">
+<<<<<<< HEAD
         {{-- {{ route('inference.generate', ['user_id' => Auth::id(), 'case_num' => Auth::id()]) }} --}}
         @csrf
+=======
+        @csrf
+
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
         <div class="row">
             @php
                 $atributCount = count($atributs); // Total atribut
@@ -34,7 +39,11 @@
                                 ->where('user_id', Auth::id())
                                 ->get();
                         @endphp
+<<<<<<< HEAD
  
+=======
+
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
                         <div class="form-group mb-4">
                             <label for="{{ $atribut->atribut_name }}">{{ ucfirst($atribut->atribut_name) }}</label>
                             <br>
@@ -49,13 +58,18 @@
                             </select>
                         </div>
                     @endfor
+<<<<<<< HEAD
                 </div>
+=======
+                </div>  
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
             @endfor
         </div>
     
         <button type="submit" name="action_type" value="Matching Rule" class="btn btn-primary">Matching Rule</button>
         <button type="submit" name="action_type" value="Forward Chaining" class="btn btn-primary">Forward Chaining</button>
         <button type="submit" name="action_type" value="Backward Chaining" class="btn btn-primary">Backward Chaining</button>
+<<<<<<< HEAD
         <button type="submit" name="action_type" value="Hybrid Similarity" class="btn btn-primary">Hybrid Similarity</button>
     </form>
     <br>
@@ -66,4 +80,7 @@
     <form action="#">
         <button type="submit" name="action_type" value="bc" class="btn btn-primary">Backward Chaining</button>
     </form> --}}
+=======
+    </form>
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 @endsection

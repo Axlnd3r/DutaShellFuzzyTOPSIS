@@ -7,7 +7,10 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+<<<<<<< HEAD
 use RuntimeException;
+=======
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 
 class AuthController extends Controller
 {
@@ -30,6 +33,11 @@ class AuthController extends Controller
         //proses input
         $user = new User();
         $user->username = $request-> username;
+<<<<<<< HEAD
+=======
+        $user->role = 'user';     // default role
+        $user->active = 'T';      // mark new user active
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
         $user->password = bcrypt($request-> password);
         $user->save();
 
@@ -72,6 +80,7 @@ class AuthController extends Controller
         // Cari user berdasarkan username
         $user = User::where('username', $request->username)->first();
 
+<<<<<<< HEAD
         // Cek apakah user ditemukan dan password cocok (mendukung fallback plaintext -> hash)
         if ($user && $this->checkAndUpgradePassword($user, $request->password)) {
             // Izinkan user atau admin login dari form user
@@ -90,6 +99,28 @@ class AuthController extends Controller
                 return view('user.menu.user');
             } else {
                 return redirect()->back()->withErrors(['role' => 'Access denied.']);
+=======
+        // Cek apakah user ditemukan dan password cocok
+        if ($user && $this->passwordMatchesAndRehash($user, $request->password)) {
+            $userRole = strtolower((string)($user->role ?: 'user'));
+
+            // Cek apakah user adalah admin
+            if ($userRole === 'user') {
+                if ($user->active === 'Inactive') {
+                    return back()->withErrors(['username' => 'Your account is inactive. Please contact admin.']);
+                }
+                // Login user
+                Auth::login($user);
+
+                // Redirect ke halaman dashboard atau tujuan lain
+                return view('admin.menu.case');
+                
+            } 
+            
+            else {
+                // Jika user bukan admin, kembali ke login dengan pesan error
+                return redirect()->back()->withErrors(['role' => 'Access denied. User only.']);
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
             }
         } else {
             // Jika tidak cocok, kembali ke form login dengan pesan error
@@ -109,10 +140,19 @@ class AuthController extends Controller
         // Cari user berdasarkan username
         $user = User::where('username', $request->username)->first();
 
+<<<<<<< HEAD
         // Cek apakah user ditemukan dan password cocok (mendukung fallback plaintext -> hash)
         if ($user && $this->checkAndUpgradePassword($user, $request->password)) {
             // Cek apakah user adalah admin
             if ($user->role === 'admin') {
+=======
+        // Cek apakah user ditemukan dan password cocok
+        if ($user && $this->passwordMatchesAndRehash($user, $request->password)) {
+            $userRole = strtolower((string)($user->role ?: 'user'));
+
+            // Cek apakah user adalah admin
+            if ($userRole === 'admin') {
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
                 // Login user
                 Auth::login($user);
 
@@ -128,6 +168,7 @@ class AuthController extends Controller
         }
     }
 
+<<<<<<< HEAD
     /**
      * Cek password dengan dukungan plaintext lama -> hash baru (bcrypt).
      */
@@ -152,6 +193,8 @@ class AuthController extends Controller
         return false;
     }
 
+=======
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
     // Logout user
     function logout()
     {
@@ -182,4 +225,33 @@ class AuthController extends Controller
         return redirect()->back()->with('success', 'Project updated successfully!');
     }
     
+<<<<<<< HEAD
+=======
+    /**
+     * Verifies the password while tolerating legacy plain-text rows and
+     * transparently rehashing them to bcrypt for future logins.
+     */
+    private function passwordMatchesAndRehash(User $user, string $plainPassword): bool
+    {
+        try {
+            if (Hash::check($plainPassword, $user->password)) {
+                if (Hash::needsRehash($user->password)) {
+                    $user->password = Hash::make($plainPassword);
+                    $user->save();
+                }
+                return true;
+            }
+        } catch (\RuntimeException $e) {
+            // Hash::check throws when stored value is not a bcrypt hash
+            if (hash_equals($user->password, $plainPassword)) {
+                $user->password = Hash::make($plainPassword);
+                $user->save();
+                return true;
+            }
+        }
+
+        return false;
+    }
+    
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 }

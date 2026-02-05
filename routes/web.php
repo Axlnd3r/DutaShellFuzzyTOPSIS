@@ -13,19 +13,27 @@ use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\DecisionTreeController;
 use App\Http\Controllers\FCController;
 use App\Http\Controllers\InferenceController;
+<<<<<<< HEAD
 use App\Http\Controllers\HSController;
 use App\Http\Controllers\JCController;
 use App\Http\Controllers\CSController;
+=======
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 use App\Http\Controllers\ProfileAdminController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RuleController;
 use App\Http\Controllers\TreeController;
+<<<<<<< HEAD
+=======
+use App\Http\Controllers\SVMController;
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 
 
 //USER
 //project
 Route::get('/project', function () {
     return view('admin.menu.case');
+<<<<<<< HEAD
 })->middleware('auth');
 Route::get('/project/edit', [CaseController::class, 'edit'])->name('admin.menu.case.edit')->middleware('auth');
 Route::put('/project/update', [CaseController::class, 'update'])->name('admin.menu.case.update')->middleware('auth');
@@ -33,6 +41,11 @@ Route::put('/project/update', [CaseController::class, 'update'])->name('admin.me
 //     phpinfo();
 // });
 
+=======
+});
+Route::get('/project/edit', [CaseController::class, 'edit'])->name('admin.menu.case.edit')->middleware('auth');
+Route::put('/project/update', [CaseController::class, 'update'])->name('admin.menu.case.update')->middleware('auth');
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 //atribut
 Route::get('/attributte', [AtributController::class, 'index'])->name('admin.menu.attributte')->middleware('auth');
 Route::get('/attributte/create', [AtributController::class, 'create'])->name('admin.menu.atribut.tambah')->middleware('auth');
@@ -48,6 +61,7 @@ Route::get('/attributteValue/{id}/edit', [AtributValueController::class, 'edit']
 Route::put('/attributteValue/{id}', [AtributValueController::class, 'update'])->name('admin.menu.atributValue.update')->middleware('auth');
 Route::delete('/attributteValue/{id}', [AtributValueController::class, 'destroy'])->name('admin.menu.atributValue.hapus')->middleware('auth');
 //generate case
+<<<<<<< HEAD
 Route::get('/generateCase', [CaseUserController::class, 'showGenerateCaseForm'])->name('generate.case.form')->middleware('auth');
 Route::post('/generateCase', [CaseUserController::class, 'generateCase'])->name('generate.case')->middleware('auth');
 Route::post('/generateCase/store', [CaseUserController::class, 'store'])->name('generate.case.store')->middleware('auth');
@@ -111,6 +125,64 @@ Route::post('/cosineSimilarity/{user_id}/{case_num}', [CSController::class, 'gen
 Route::get('/detail', function () {
     return view('admin.menu.detail');
 })->middleware('auth');
+=======
+Route::get('/generateCase', [CaseUserController::class, 'showGenerateCaseForm'])->name('generate.case.form');
+Route::post('/generateCase', [CaseUserController::class, 'generateCase'])->name('generate.case');
+Route::post('/generateCase/store', [CaseUserController::class, 'store'])->name('generate.case.store');
+Route::get('/generateCase/new', [CaseUserController::class, 'create'])->name('generate.case.create');
+Route::get('/generateCase/{case_id}/edit', [CaseUserController::class, 'edit'])->name('generate.case.edit');
+Route::put('/generateCase/{case_id}', [CaseUserController::class, 'update'])->name('generate.case.update');
+Route::delete('/generateCase/{case_id}', [CaseUserController::class, 'destroy'])->name('generate.case.destroy');
+//tree
+Route::get('/tree', [DecisionTreeController::class, 'showTree'])->name('tree.show');
+Route::get('/tree/generate', [DecisionTreeController::class, 'generateTree'])->name('tree.generate');
+
+//SVM Model
+// Route::get('/SupportVectorMachine', [SVMController::class, 'show'])->name('SVM.show');
+// Route::post('/SupportVectorMachine/generate', [SVMController::class, 'generateSVM'])->name('SVM.generate'); // ← ganti ke POST
+// Route::post('/SupportVectorMachine/predict', [SVMController::class, 'predictOnly'])->name('SVM.predict');
+
+Route::get('/SupportVectorMachine', [SVMController::class, 'show'])->name('SVM.show');
+Route::post('/SupportVectorMachine/generate', [SVMController::class, 'generateSVM'])->name('SVM.generate');
+Route::post('/SupportVectorMachine/store', [SVMController::class, 'storeCaseAndTrain'])->name('SVM.storeCase');
+
+
+
+//rule
+Route::get('/rule', function () {
+    return view('admin.menu.rule');
+});
+Route::get('/rule/{user_id}/{case_num}', [RuleController::class, 'generateRule']);
+//consultation
+Route::get('/consultation', [ConsultationController::class, 'showConsultationForm'])->name('test.case.form');
+Route::post('/consultation/store', [ConsultationController::class, 'store'])->name('test.case.store');
+Route::get('/consultation/new', [ConsultationController::class, 'create'])->name('test.case.create');
+Route::get('/consultation/{case_id}/edit', [ConsultationController::class, 'edit'])->name('test.case.edit');
+Route::put('/consultation/{case_id}', [ConsultationController::class, 'update'])->name('test.case.update');
+Route::delete('/consultation/{case_id}', [ConsultationController::class, 'destroy'])->name('test.case.destroy');
+//inference
+Route::get('/inference', function () {
+    return view('admin.menu.inferensi');
+});
+Route::get('/inference/{user_id}/{case_num}', [InferenceController::class, 'generateInference']);
+Route::post('/inference/{user_id}/{case_num}', [InferenceController::class, 'generate'])->name('inference.generate');
+//fc
+Route::get('/forwardChaining', function () {
+    return view('admin.menu.fc');
+});
+Route::get('/forwardChaining/{user_id}/{case_num}', [FCController::class, 'generateFC']);
+Route::post('/forwardChaining/{user_id}/{case_num}', [FCController::class, 'generateFC'])->name('inference.fc');
+//bc
+Route::get('/backward', function () {
+    return view('admin.menu.bc');
+});
+Route::get('/backwardChaining/{user_id}/{case_num}', [BCController::class, 'generateBC']);
+Route::post('/backwardChaining/{user_id}/{case_num}', [BCController::class, 'generateBC'])->name('inference.bc');
+//detail
+Route::get('/detail', function () {
+    return view('admin.menu.detail');
+});
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 
 //profile
 Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -141,7 +213,10 @@ Route::get('/profile/admin', [ProfileAdminController::class, 'edit'])->name('pro
 Route::post('/profile/admin/update', [ProfileAdminController::class, 'update'])->name('profileAdmin.update');
 //
 
+<<<<<<< HEAD
 // Debug phpinfo (hapus jika tidak diperlukan)
 Route::get('/phpinfo', function () {
     phpinfo();
 })->middleware('auth');
+=======
+>>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
