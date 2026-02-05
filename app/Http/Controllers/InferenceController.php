@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Redirect;
 
 class InferenceController extends Controller
 {
@@ -30,6 +31,37 @@ class InferenceController extends Controller
 
         // Kembalikan ke view inferensi
         return view('admin.menu.inferensi', compact('output', 'case_num'))->with('success', 'Inference updated successfully!');
+    }
+
+    public function evaluate(Request $request)
+    {
+        $user_id = Auth::id();
+        $mode = $request->input('mode', 'hybrid');
+        $eval = $request->input('eval', 'loocv');
+        $param = $request->input('param');
+
+        $script = base_path('scripts/decision-tree/eval_similarity.php');
+        $cmd = 'php "' . $script . '" ' . $user_id . ' ' . $mode . ' ' . $eval;
+        if (!empty($param)) {
+            $cmd .= ' ' . $param;
+        }
+
+        $output = shell_exec($cmd);
+
+        $matrix = null;
+        if ($output && ($pos = strpos($output, 'MATRIX_JSON:')) !== false) {
+            $jsonPart = substr($output, $pos + strlen('MATRIX_JSON:'));
+            $decoded = json_decode($jsonPart, true);
+            if ($decoded) {
+                $matrix = $decoded;
+            }
+        }
+        $cleanOutput = $output;
+        if (($pos = strpos($output, 'MATRIX_JSON:')) !== false) {
+            $cleanOutput = trim(substr($output, 0, $pos));
+        }
+
+        return Redirect::to('/inference')->with('eval_output', $cleanOutput ?: 'No output')->with('eval_matrix', $matrix);
     }
 
 }

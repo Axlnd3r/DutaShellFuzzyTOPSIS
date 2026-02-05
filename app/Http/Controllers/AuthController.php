@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use RuntimeException;
 
 class AuthController extends Controller
 {
@@ -71,24 +72,24 @@ class AuthController extends Controller
         // Cari user berdasarkan username
         $user = User::where('username', $request->username)->first();
 
-        // Cek apakah user ditemukan dan password cocok
-        if ($user && Hash::check($request->password, $user->password)) {
-            // Cek apakah user adalah admin
-            if ($user->role === 'user') {
+        // Cek apakah user ditemukan dan password cocok (mendukung fallback plaintext -> hash)
+        if ($user && $this->checkAndUpgradePassword($user, $request->password)) {
+            // Izinkan user atau admin login dari form user
+            $role = $user->role ?? 'user';
+            if ($role === '' || $role === null) {
+                $role = 'user';
+            }
+            if ($role === 'user') {
                 if ($user->active === 'Inactive') {
                     return back()->withErrors(['username' => 'Your account is inactive. Please contact admin.']);
                 }
-                // Login user
                 Auth::login($user);
-
-                // Redirect ke halaman dashboard atau tujuan lain
                 return view('admin.menu.case');
-                
-            } 
-            
-            else {
-                // Jika user bukan admin, kembali ke login dengan pesan error
-                return redirect()->back()->withErrors(['role' => 'Access denied. User only.']);
+            } elseif ($role === 'admin') {
+                Auth::login($user);
+                return view('user.menu.user');
+            } else {
+                return redirect()->back()->withErrors(['role' => 'Access denied.']);
             }
         } else {
             // Jika tidak cocok, kembali ke form login dengan pesan error
@@ -108,8 +109,8 @@ class AuthController extends Controller
         // Cari user berdasarkan username
         $user = User::where('username', $request->username)->first();
 
-        // Cek apakah user ditemukan dan password cocok
-        if ($user && Hash::check($request->password, $user->password)) {
+        // Cek apakah user ditemukan dan password cocok (mendukung fallback plaintext -> hash)
+        if ($user && $this->checkAndUpgradePassword($user, $request->password)) {
             // Cek apakah user adalah admin
             if ($user->role === 'admin') {
                 // Login user
@@ -125,6 +126,30 @@ class AuthController extends Controller
             // Jika username atau password salah
             return redirect()->back()->withErrors(['username' => 'Incorrect username or password.']);
         }
+    }
+
+    /**
+     * Cek password dengan dukungan plaintext lama -> hash baru (bcrypt).
+     */
+    protected function checkAndUpgradePassword($user, $plain)
+    {
+        try {
+            if (Hash::check($plain, $user->password)) {
+                if (Hash::needsRehash($user->password)) {
+                    $user->password = Hash::make($plain);
+                    $user->save();
+                }
+                return true;
+            }
+        } catch (RuntimeException $e) {
+            // Jika hash tidak valid (mis. plaintext tersimpan), bandingkan langsung
+            if ($user->password === $plain) {
+                $user->password = Hash::make($plain);
+                $user->save();
+                return true;
+            }
+        }
+        return false;
     }
 
     // Logout user

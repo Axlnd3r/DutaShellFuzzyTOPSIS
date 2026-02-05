@@ -6,12 +6,16 @@ use Illuminate\Routing\RouteGroup;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AtributController;
 use App\Http\Controllers\AtributValueController;
+use App\Http\Controllers\BCController;
 use App\Http\Controllers\CaseController;
 use App\Http\Controllers\CaseUserController;
 use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\DecisionTreeController;
 use App\Http\Controllers\FCController;
 use App\Http\Controllers\InferenceController;
+use App\Http\Controllers\HSController;
+use App\Http\Controllers\JCController;
+use App\Http\Controllers\CSController;
 use App\Http\Controllers\ProfileAdminController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RuleController;
@@ -22,9 +26,13 @@ use App\Http\Controllers\TreeController;
 //project
 Route::get('/project', function () {
     return view('admin.menu.case');
-});
+})->middleware('auth');
 Route::get('/project/edit', [CaseController::class, 'edit'])->name('admin.menu.case.edit')->middleware('auth');
 Route::put('/project/update', [CaseController::class, 'update'])->name('admin.menu.case.update')->middleware('auth');
+// Route::get('/phpinfo', function () {
+//     phpinfo();
+// });
+
 //atribut
 Route::get('/attributte', [AtributController::class, 'index'])->name('admin.menu.attributte')->middleware('auth');
 Route::get('/attributte/create', [AtributController::class, 'create'])->name('admin.menu.atribut.tambah')->middleware('auth');
@@ -40,40 +48,69 @@ Route::get('/attributteValue/{id}/edit', [AtributValueController::class, 'edit']
 Route::put('/attributteValue/{id}', [AtributValueController::class, 'update'])->name('admin.menu.atributValue.update')->middleware('auth');
 Route::delete('/attributteValue/{id}', [AtributValueController::class, 'destroy'])->name('admin.menu.atributValue.hapus')->middleware('auth');
 //generate case
-Route::get('/generateCase', [CaseUserController::class, 'showGenerateCaseForm'])->name('generate.case.form');
-Route::post('/generateCase', [CaseUserController::class, 'generateCase'])->name('generate.case');
-Route::post('/generateCase/store', [CaseUserController::class, 'store'])->name('generate.case.store');
-Route::get('/generateCase/new', [CaseUserController::class, 'create'])->name('generate.case.create');
-Route::get('/generateCase/{case_id}/edit', [CaseUserController::class, 'edit'])->name('generate.case.edit');
-Route::put('/generateCase/{case_id}', [CaseUserController::class, 'update'])->name('generate.case.update');
-Route::delete('/generateCase/{case_id}', [CaseUserController::class, 'destroy'])->name('generate.case.destroy');
+Route::get('/generateCase', [CaseUserController::class, 'showGenerateCaseForm'])->name('generate.case.form')->middleware('auth');
+Route::post('/generateCase', [CaseUserController::class, 'generateCase'])->name('generate.case')->middleware('auth');
+Route::post('/generateCase/store', [CaseUserController::class, 'store'])->name('generate.case.store')->middleware('auth');
+Route::get('/generateCase/new', [CaseUserController::class, 'create'])->name('generate.case.create')->middleware('auth');
+Route::get('/generateCase/{case_id}/edit', [CaseUserController::class, 'edit'])->name('generate.case.edit')->middleware('auth');
+Route::put('/generateCase/{case_id}', [CaseUserController::class, 'update'])->name('generate.case.update')->middleware('auth');
+Route::delete('/generateCase/{case_id}', [CaseUserController::class, 'destroy'])->name('generate.case.destroy')->middleware('auth');
 //tree
-Route::get('/tree', [DecisionTreeController::class, 'showTree'])->name('tree.show');
-Route::get('/tree/generate', [DecisionTreeController::class, 'generateTree'])->name('tree.generate');
+Route::get('/tree', [DecisionTreeController::class, 'showTree'])->name('tree.show')->middleware('auth');
+Route::get('/tree/generate', [DecisionTreeController::class, 'generateTree'])->name('tree.generate')->middleware('auth');
 //rule
 Route::get('/rule', function () {
     return view('admin.menu.rule');
-});
+})->middleware('auth');
 Route::get('/rule/{user_id}/{case_num}', [RuleController::class, 'generateRule']);
 //consultation
-Route::get('/consultation', [ConsultationController::class, 'showConsultationForm'])->name('test.case.form');
-Route::post('/consultation/store', [ConsultationController::class, 'store'])->name('test.case.store');
-Route::get('/consultation/new', [ConsultationController::class, 'create'])->name('test.case.create');
-Route::get('/consultation/{case_id}/edit', [ConsultationController::class, 'edit'])->name('test.case.edit');
-Route::put('/consultation/{case_id}', [ConsultationController::class, 'update'])->name('test.case.update');
-Route::delete('/consultation/{case_id}', [ConsultationController::class, 'destroy'])->name('test.case.destroy');
+Route::get('/consultation', [ConsultationController::class, 'showConsultationForm'])->name('test.case.form')->middleware('auth');
+Route::post('/consultation/store', [ConsultationController::class, 'store'])->name('test.case.store')->middleware('auth');
+Route::get('/consultation/new', [ConsultationController::class, 'create'])->name('test.case.create')->middleware('auth');
+Route::get('/consultation/{case_id}/edit', [ConsultationController::class, 'edit'])->name('test.case.edit')->middleware('auth');
+Route::put('/consultation/{case_id}', [ConsultationController::class, 'update'])->name('test.case.update')->middleware('auth');
+Route::delete('/consultation/{case_id}', [ConsultationController::class, 'destroy'])->name('test.case.destroy')->middleware('auth');
 //inference
 Route::get('/inference', function () {
     return view('admin.menu.inferensi');
-});
-Route::get('/inference/{user_id}/{case_num}', [InferenceController::class, 'generateInference']);
-Route::post('/inference/{user_id}/{case_num}', [InferenceController::class, 'generate'])->name('inference.generate');
+})->middleware('auth');
+Route::get('/inference/{user_id}/{case_num}', [InferenceController::class, 'generateInference'])->middleware('auth');
+Route::post('/inference/{user_id}/{case_num}', [InferenceController::class, 'generate'])->name('inference.generate')->middleware('auth');
+Route::post('/inference/evaluate', [InferenceController::class, 'evaluate'])->name('inference.evaluate')->middleware('auth');
 //fc
 Route::get('/forwardChaining', function () {
     return view('admin.menu.fc');
-});
-Route::get('/forwardChaining/{user_id}/{case_num}', [FCController::class, 'generateFC']);
-Route::post('/forwardChaining/{user_id}/{case_num}', [FCController::class, 'generateFC'])->name('inference.fc');
+})->middleware('auth');
+Route::get('/forwardChaining/{user_id}/{case_num}', [FCController::class, 'generateFC'])->middleware('auth');
+Route::post('/forwardChaining/{user_id}/{case_num}', [FCController::class, 'generateFC'])->name('inference.fc')->middleware('auth');
+//bc
+Route::get('/backward', function () {
+    return view('admin.menu.bc');
+})->middleware('auth');
+Route::get('/backwardChaining/{user_id}/{case_num}', [BCController::class, 'generateBC'])->middleware('auth');
+Route::post('/backwardChaining/{user_id}/{case_num}', [BCController::class, 'generateBC'])->name('inference.bc')->middleware('auth');
+//hybrid similarity
+Route::get('/hybridSimilarity', function () {
+    return view('admin.menu.inferensi');
+})->middleware('auth');
+Route::get('/hybridSimilarity/{user_id}/{case_num}', [HSController::class, 'generateHS'])->middleware('auth');
+Route::post('/hybridSimilarity/{user_id}/{case_num}', [HSController::class, 'generateHS'])->name('inference.hs')->middleware('auth');
+//jaccard similarity
+Route::get('/jaccardSimilarity', function () {
+    return view('admin.menu.inferensi');
+})->middleware('auth');
+Route::get('/jaccardSimilarity/{user_id}/{case_num}', [JCController::class, 'generateJC'])->middleware('auth');
+Route::post('/jaccardSimilarity/{user_id}/{case_num}', [JCController::class, 'generateJC'])->name('inference.jc')->middleware('auth');
+//cosine similarity
+Route::get('/cosineSimilarity', function () {
+    return view('admin.menu.inferensi');
+})->middleware('auth');
+Route::get('/cosineSimilarity/{user_id}/{case_num}', [CSController::class, 'generateCS'])->middleware('auth');
+Route::post('/cosineSimilarity/{user_id}/{case_num}', [CSController::class, 'generateCS'])->name('inference.cs')->middleware('auth');
+//detail
+Route::get('/detail', function () {
+    return view('admin.menu.detail');
+})->middleware('auth');
 
 //profile
 Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -104,3 +141,7 @@ Route::get('/profile/admin', [ProfileAdminController::class, 'edit'])->name('pro
 Route::post('/profile/admin/update', [ProfileAdminController::class, 'update'])->name('profileAdmin.update');
 //
 
+// Debug phpinfo (hapus jika tidak diperlukan)
+Route::get('/phpinfo', function () {
+    phpinfo();
+})->middleware('auth');

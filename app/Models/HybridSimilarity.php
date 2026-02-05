@@ -2,17 +2,16 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
-class Inferensi extends Model
+class HybridSimilarity extends Model
 {
-    // Primary key tabel
     protected $primaryKey = 'inf_id';
+    public $timestamps = false;
 
-    // Field yang dapat diisi (mass assignable)
     protected $fillable = [
+        'case_id',
         'case_goal',
         'rule_id',
         'rule_goal',
@@ -21,20 +20,14 @@ class Inferensi extends Model
         'waktu',
     ];
 
-    // Menonaktifkan timestamps (created_at, updated_at)
-    public $timestamps = false;
-
     protected $table;
 
     public function setTableForUser($userId)
     {
-        $this->table = 'inferensi_user_' . $userId;
+        $this->table = 'inferensi_hs_user_' . $userId;
         return $this;
     }
 
-    /**
-     * Check if the table exists in the database.
-     */
     public function tableExists()
     {
         return DB::getSchemaBuilder()->hasTable($this->table);
@@ -44,10 +37,8 @@ class Inferensi extends Model
     {
         if ($this->tableExists()) {
             return DB::table($this->table)->get();
-        } else {
-            // Return empty collection if the table doesn't exist
-            return collect([]);
         }
+        return collect([]);
     }
-
 }
+
