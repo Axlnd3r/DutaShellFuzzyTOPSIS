@@ -34,14 +34,16 @@
                 Decision Tree
             </a>
 
-<<<<<<< HEAD
-=======
             <a class="nav-link" href="{{ url('SupportVectorMachine') }}">
                 <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                 Support Vector Machine
             </a>
 
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
+            <a class="nav-link {{ request()->is('randomforest*') ? 'active' : '' }}" href="{{ url('randomforest') }}">
+                <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
+                Random Forest
+            </a>
+
             <a class="nav-link" href="{{ url('rule') }}">
                 <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                 Rule

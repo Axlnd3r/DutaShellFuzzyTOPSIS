@@ -23,8 +23,6 @@ window.addEventListener('DOMContentLoaded', event => {
         });
     }
 
-<<<<<<< HEAD
-=======
     // Adjustable sidebar width (drag to resize)
     const resizeHandle = document.getElementById('layoutSidenav_resize');
     const root = document.documentElement;
@@ -82,5 +80,4 @@ window.addEventListener('DOMContentLoaded', event => {
         });
     }
 
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 });

@@ -16,13 +16,7 @@
     @endif
 
     <form action="{{ route('test.case.store') }}" method="POST">
-<<<<<<< HEAD
-        {{-- {{ route('inference.generate', ['user_id' => Auth::id(), 'case_num' => Auth::id()]) }} --}}
         @csrf
-=======
-        @csrf
-
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
         <div class="row">
             @php
                 $atributCount = count($atributs); // Total atribut
@@ -39,11 +33,6 @@
                                 ->where('user_id', Auth::id())
                                 ->get();
                         @endphp
-<<<<<<< HEAD
- 
-=======
-
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
                         <div class="form-group mb-4">
                             <label for="{{ $atribut->atribut_name }}">{{ ucfirst($atribut->atribut_name) }}</label>
                             <br>
@@ -58,29 +47,29 @@
                             </select>
                         </div>
                     @endfor
-<<<<<<< HEAD
                 </div>
-=======
-                </div>  
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
             @endfor
         </div>
-    
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-4">
+                <label class="form-label">SVM Kernel (optional)</label>
+                <select name="svm_kernel" class="form-select">
+                    <option value="sgd">SGD (Linear)</option>
+                    <option value="rbf:D=128:gamma=0.25">RBF (D=128, gamma=0.25)</option>
+                    <option value="sigmoid:D=128:scale=1.0:coef0=0.0">Sigmoid (D=128, scale=1.0, coef0=0.0)</option>
+                </select>
+                <small class="text-muted">Dipakai hanya jika memilih Support Vector Machine.</small>
+            </div>
+        </div>
+
         <button type="submit" name="action_type" value="Matching Rule" class="btn btn-primary">Matching Rule</button>
         <button type="submit" name="action_type" value="Forward Chaining" class="btn btn-primary">Forward Chaining</button>
         <button type="submit" name="action_type" value="Backward Chaining" class="btn btn-primary">Backward Chaining</button>
-<<<<<<< HEAD
         <button type="submit" name="action_type" value="Hybrid Similarity" class="btn btn-primary">Hybrid Similarity</button>
+        <button type="submit" name="action_type" value="Jaccard Similarity" class="btn btn-primary">Jaccard Similarity</button>
+        <button type="submit" name="action_type" value="Cosine Similarity" class="btn btn-primary">Cosine Similarity</button>
+        <button type="submit" name="action_type" value="Support Vector Machine" class="btn btn-primary">Support Vector Machine</button>
+        <button type="submit" name="action_type" value="Random Forest" class="btn btn-primary">Random Forest</button>
     </form>
-    <br>
-    {{-- <form action="#">
-        <button type="submit" name="action_type" value="fc" class="btn btn-primary">Forward Chaining</button>
-    </form>
-    <br>
-    <form action="#">
-        <button type="submit" name="action_type" value="bc" class="btn btn-primary">Backward Chaining</button>
-    </form> --}}
-=======
-    </form>
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 @endsection

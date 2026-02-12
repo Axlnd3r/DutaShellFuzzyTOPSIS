@@ -42,11 +42,7 @@
         </div>
     @endif
 
-<<<<<<< HEAD
-    <div class="d-flex gap-2">
-=======
     <div class="d-flex flex-wrap gap-2">
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
         <a href="{{ route('test.case.create') }}" class="btn btn-primary">Add New</a>
     </div>
 
@@ -54,68 +50,14 @@
 
     @if (!$tableExists)
         <ol class="breadcrumb mb-4">
-<<<<<<< HEAD
             <li class="breadcrumb-item active">There is no case for this user.</li>
-=======
-            <li class="breadcrumb-item active">There is no case f   or this user.</li>
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
         </ol>
-    @elseif ($generateCase->isEmpty())
+    @elseif ($generateCase->count() === 0)
         <ol class="breadcrumb mb-4">
             <li class="breadcrumb-item active">The table has been created but no data is available yet.</li>
         </ol>
     @else
         <div class="card-body">
-<<<<<<< HEAD
-            <table class="table table-bordered">
-                <thead>
-                    <tr>
-                        <th>Id</th>
-                        {{-- <th>Case Title</th> --}}
-                        @foreach($filteredColumns as $column)
-                            @if(!in_array($column, $excludeColumns))
-                                <th>{{ (str_replace('_', ' ', preg_replace('/\b\d+_/', ' ', $column))) }}</th>
-                            @endif
-                        @endforeach
-                        <th>Algortihm</th>
-                        {{-- <th>Action</th> --}}
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($generateCase as $index => $row)
-                        <tr>
-                            <td>{{ $row->case_id }}</td>
-                            {{-- <td>{{ $kasus->case_title }}</td> --}}
-                            @foreach($filteredColumns as $column)
-                                @if(!in_array($column, $excludeColumns))
-                                    <td>
-                                        @php
-                                            $cleanedIfPart = preg_replace('/\b\d+_/', ' ', $row->$column);
-                                            $cleanedIfPart = str_replace('_', ' ', $cleanedIfPart);
-                                            $cleanedIfPart = str_replace('-', ' ', $cleanedIfPart);
-                                        @endphp
-                                        {{ $cleanedIfPart }}
-                                    </td>
-                                @endif
-                            @endforeach
-                            @if(in_array('algoritma', $columns))
-                                <td>{{ $row->algoritma }}</td>
-                            @else
-                                <td>-</td> <!-- Placeholder jika kolom tidak ditemukan -->
-                            @endif
-                            {{-- <td>
-                                <a href="{{ route('test.case.edit', $row->case_id) }}" class="btn btn-warning btn-sm">Edit</a>
-                                <form action="{{ route('test.case.destroy', $row->case_id) }}" method="POST" style="display:inline;">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?')">Delete</button>
-                                </form>
-                            </td>                         --}}
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-=======
             <div class="table-responsive">
                 <table class="table table-bordered mb-0">
                     <thead>
@@ -149,9 +91,15 @@
                                     @endif
                                 @endforeach
                                 @if(in_array('algoritma', $columns))
-                                    <td>{{ $row->algoritma }}</td>
+                                    @php
+                                        $algo = $row->algoritma ?? '';
+                                        if ($algo === '' || $algo === null) {
+                                            $algo = $algorithmMap[$row->case_id] ?? '-';
+                                        }
+                                    @endphp
+                                    <td>{{ $algo }}</td>
                                 @else
-                                    <td>-</td> <!-- Placeholder jika kolom tidak ditemukan -->
+                                    <td>{{ $algorithmMap[$row->case_id] ?? '-' }}</td>
                                 @endif
                                 {{-- <td>
                                     <a href="{{ route('test.case.edit', $row->case_id) }}" class="btn btn-warning btn-sm">Edit</a>
@@ -166,7 +114,6 @@
                     </tbody>
                 </table>
             </div>
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 
             <!-- Navigasi Pagination -->
             <div class="d-flex justify-content-center mt-4">

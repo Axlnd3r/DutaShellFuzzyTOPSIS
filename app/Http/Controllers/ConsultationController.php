@@ -2,206 +2,12 @@
 
 namespace App\Http\Controllers;
 
-<<<<<<< HEAD
-=======
 use App\Support\SvmModelLocator;
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-<<<<<<< HEAD
-
-class ConsultationController extends Controller
-{
-    public function showConsultationForm()
-    {
-        $user = Auth::user();
-        $generate = new \App\Models\Consultation();
-        $generate->setTableForUser($user->user_id);
-
-        // Periksa apakah tabel ada
-        $tableExists = $generate->tableExists();
-        $generateCase = $tableExists ? $generate->getRules() 
-        : collect();
-
-        // Mengambil nama kolom tabel yang sudah di-generate
-        $columns = $tableExists ? Schema::getColumnListing($generate->getTable()) : [];
-
-        $kasus = \App\Models\Kasus::where('case_num', $user->user_id)->paginate(25);
-        
-        return view('admin.menu.testCase', compact('generateCase', 'columns', 'tableExists'));
-    }
-
-    public function create()
-    {
-        $user_id = Auth::user()->user_id;
-        $atributs = DB::table('atribut')
-                ->where('user_id', $user_id)
-                ->orderBy('goal', 'desc')
-                ->where('goal', 'F') 
-                ->get();
-        return view('admin.menu.testCaseTambah', compact('atributs'));
-    }
-
-    public function store(Request $request)
-    {
-        // Mendapatkan user_id dari user yang sedang login
-        $user_id = Auth::id();
-        $tableName = 'test_case_user_' . $user_id;  // Menentukan nama tabel sesuai dengan user_id
-    
-        // Mendapatkan daftar atribut untuk user_id yang sedang login
-        $atributs = DB::table('atribut')
-                        ->where('user_id', $user_id)
-                        ->where('goal', 'F')
-                        ->orderBy('goal', 'desc')
-                        ->get();
-    
-        // Menyiapkan array kosong untuk menyimpan data
-        $data = [
-            'user_id' => $user_id,
-            'case_num' => $user_id,  // Mengambil nilai case_num
-            'algoritma' => $request->input('action_type')
-        ];
-    
-        $queryCheck = DB::table($tableName)->where('user_id', $user_id);
-    
-        // Loop untuk memeriksa kolom dan menyusun data berdasarkan input form
-        foreach ($atributs as $atribut) {
-            $atribut_name = $atribut->atribut_name;
-            $atribut_id = $atribut->atribut_id;
-    
-            // Membangun nama kolom berdasarkan atribut_name
-            $kolom_name = "{$atribut_id}_{$atribut_name}";
-    
-            // Mengambil nilai input untuk kolom ini
-            if ($request->has($kolom_name)) {
-                $input_value = $request->input($kolom_name);
-    
-                // Mengambil nilai enum yang valid untuk atribut ini
-                $valid_values = DB::table('atribut_value')
-                                  ->where('user_id', $user_id)
-                                  ->where('atribut_id', $atribut_id)
-                                  ->where(DB::raw("CONCAT(value_id, '_', value_name)"), $input_value)
-                                  ->exists();
-    
-                if ($valid_values) {
-                    $data[$kolom_name] = $input_value;
-                } else {
-                    return redirect()->back()->withErrors("Invalid value for attribute {$atribut_name}.");
-                }
-            }
-            
-        }
-
-        // Setelah data disiapkan, lakukan insert ke dalam tabel
-        if (!empty($data)) {
-            DB::table($tableName)->insert($data);
-            // return redirect()->route('inference.generate', ['user_id' => $user_id, 'case_num' => $user_id])->with('success', 'Case added successfully.');
-        } else {
-            return redirect()->back()->withErrors('No data to insert.');
-        }
-
-        // Ambil action_type untuk menentukan redirect
-        $actionType = $request->input('action_type');
-
-        if ($actionType === 'Matching Rule') {
-            return redirect()->route('inference.generate', ['user_id' => $user_id, 'case_num' => $user_id])
-                ->with('success', 'Matching Rule executed!');
-        } elseif ($actionType === 'Forward Chaining') {
-            return redirect()->route('inference.fc', ['user_id' => $user_id, 'case_num' => $user_id])
-                ->with('success', 'Forward Chaining executed!');
-        } elseif ($actionType === 'Backward Chaining') {
-            return redirect()->route('inference.bc', ['user_id' => $user_id, 'case_num' => $user_id])
-                ->with('success', 'Backward Chaining executed!');
-        } elseif ($actionType === 'Hybrid Similarity') {
-            return redirect()->route('inference.hs', ['user_id' => $user_id, 'case_num' => $user_id])
-                ->with('success', 'Hybrid Similarity executed!');
-        } elseif ($actionType === 'Jaccard Similarity') {
-            return redirect()->route('inference.jc', ['user_id' => $user_id, 'case_num' => $user_id])
-                ->with('success', 'Jaccard Similarity executed!');
-        } elseif ($actionType === 'Cosine Similarity') {
-            return redirect()->route('inference.cs', ['user_id' => $user_id, 'case_num' => $user_id])
-                ->with('success', 'Cosine Similarity executed!');
-        }
-
-        return redirect()->back()->with('error', 'Invalid action!');
-    }
-
-    public function edit($case_id)
-    {
-        $user_id = Auth::id();
-        $tableName = 'test_case_user_' . $user_id;
-    
-        // Cari data case berdasarkan case_id
-        $case = DB::table($tableName)->where('case_id', $case_id)->first();
-    
-        if (!$case) {
-            return redirect()->route('test.case.form')->withErrors('Case not found.');
-        }
-    
-        // Ambil daftar atribut untuk user
-        $atributs = DB::table('atribut')
-                    ->where('user_id', $user_id)
-                    ->orderBy('goal', 'desc')
-                    ->where('goal', 'F') 
-                    ->get();
-    
-        return view('admin.menu.testCaseEdit', compact('case', 'atributs', 'tableName'));
-    }
-
-    public function update(Request $request, $case_id)
-    {
-        $user_id = Auth::id();
-        $tableName = 'test_case_user_' . $user_id;
-
-        // Validasi data
-        $atributs = DB::table('atribut')
-                    ->where('user_id', $user_id)
-                    ->orderBy('goal', 'desc')
-                    ->get();
-
-        $data = [];
-
-        foreach ($atributs as $atribut) {
-            $kolom_name = "{$atribut->atribut_id}_{$atribut->atribut_name}";
-
-            if ($request->has($kolom_name)) {
-                $input_value = $request->input($kolom_name);
-    
-                // Mengambil nilai enum yang valid untuk atribut ini
-                $valid_values = DB::table('atribut_value')
-                                  ->where('user_id', $user_id)
-                                  ->where('atribut_id', $atribut->atribut_id)
-                                  ->where(DB::raw("CONCAT(value_id, '_', value_name)"), $input_value)
-                                  ->exists();
-    
-                if ($valid_values) {
-                    $data[$kolom_name] = $input_value;
-                } else {
-                    return redirect()->back()->withErrors("Invalid value for attribute {$atribut->atribut_name}.");
-                }
-            }
-        }
-        
-        // Update data berdasarkan case_id
-        DB::table($tableName)->where('case_id', $case_id)->update($data);
-
-        return redirect()->route('test.case.form')->with('success', 'Case updated successfully.');
-    }
-    public function destroy($case_id)
-    {
-        $user_id = Auth::id();
-        $tableName = 'test_case_user_' . $user_id;
-    
-        // Hapus data berdasarkan case_id
-        DB::table($tableName)->where('case_id', $case_id)->delete();
-    
-        return redirect()->route('test.case.form')->with('success', 'Case deleted successfully.');
-    }
-  
-
-=======
 use Illuminate\Support\Str;
 use Symfony\Component\Process\PhpExecutableFinder;
 use Symfony\Component\Process\Process;
@@ -219,10 +25,73 @@ class ConsultationController extends Controller
         $generate->setTableForUser($user->user_id);
 
         $tableExists  = $generate->tableExists();
+        if ($tableExists && !Schema::hasColumn($generate->getTable(), 'algoritma')) {
+            Schema::table($generate->getTable(), function (Blueprint $table) {
+                $table->string('algoritma', 50)->default('')->after('case_num');
+            });
+        }
         $generateCase = $tableExists ? $generate->getRules() : collect();
         $columns      = $tableExists ? Schema::getColumnListing($generate->getTable()) : [];
 
-        return view('admin.menu.testCase', compact('generateCase', 'columns', 'tableExists'));
+        $algorithmMap = [];
+        if ($tableExists && $generateCase->isNotEmpty()) {
+            $caseIds = $generateCase->pluck('case_id')->filter()->unique()->values()->all();
+
+            $pluckCaseIds = function (string $table, array $caseIds) {
+                if (!Schema::hasTable($table)) {
+                    return [];
+                }
+                $found = [];
+                foreach (array_chunk($caseIds, 500) as $chunk) {
+                    $ids = DB::table($table)
+                        ->whereIn('case_id', $chunk)
+                        ->pluck('case_id')
+                        ->all();
+                    if ($ids) {
+                        $found = array_merge($found, $ids);
+                    }
+                }
+                return array_values(array_unique($found));
+            };
+
+            $setIfEmpty = function (array $ids, string $label) use (&$algorithmMap) {
+                foreach ($ids as $id) {
+                    if (!isset($algorithmMap[$id])) {
+                        $algorithmMap[$id] = $label;
+                    }
+                }
+            };
+
+            $setIfEmpty($pluckCaseIds('inferensi_rf_user_' . $user->user_id, $caseIds), 'Random Forest');
+            $setIfEmpty($pluckCaseIds('inferensi_hs_user_' . $user->user_id, $caseIds), 'Hybrid Similarity');
+            $setIfEmpty($pluckCaseIds('inferensi_jc_user_' . $user->user_id, $caseIds), 'Jaccard Similarity');
+            $setIfEmpty($pluckCaseIds('inferensi_cs_user_' . $user->user_id, $caseIds), 'Cosine Similarity');
+            $setIfEmpty($pluckCaseIds('inferensi_fc_user_' . $user->user_id, $caseIds), 'Forward Chaining');
+            $setIfEmpty($pluckCaseIds('inferensi_bc_user_' . $user->user_id, $caseIds), 'Backward Chaining');
+
+            $inferensiTable = 'inferensi_user_' . $user->user_id;
+            if (Schema::hasTable($inferensiTable)) {
+                $svmIds = [];
+                foreach (array_chunk($caseIds, 500) as $chunk) {
+                    $ids = DB::table($inferensiTable)
+                        ->whereIn('case_id', $chunk)
+                        ->where(function ($q) {
+                            $q->where('rule_id', 'SVM')
+                              ->orWhere('rule_goal', 'like', '%kernel=%');
+                        })
+                        ->pluck('case_id')
+                        ->all();
+                    if ($ids) {
+                        $svmIds = array_merge($svmIds, $ids);
+                    }
+                }
+                $svmIds = array_values(array_unique($svmIds));
+                $setIfEmpty($svmIds, 'Support Vector Machine');
+                $setIfEmpty($pluckCaseIds($inferensiTable, $caseIds), 'Matching Rule');
+            }
+        }
+
+        return view('admin.menu.testCase', compact('generateCase', 'columns', 'tableExists', 'algorithmMap'));
     }
 
     /**
@@ -245,12 +114,28 @@ class ConsultationController extends Controller
 
     /**
      * Simpan 1 baris test_case_user_{userId}, lalu jalankan algoritma sesuai action_type.
-     * action_type ∈ {Matching Rule, Forward Chaining, Backward Chaining, Support Vector Machine}
+     * action_type: Matching Rule, Forward Chaining, Backward Chaining, Hybrid Similarity,
+     * Jaccard Similarity, Cosine Similarity, Support Vector Machine
      */
     public function store(Request $request)
     {
         $user_id = Auth::user()->user_id;
         $table   = 'test_case_user_' . $user_id;
+        $actionType = $request->input('action_type');
+
+        $allowedActions = [
+            'Matching Rule',
+            'Forward Chaining',
+            'Backward Chaining',
+            'Hybrid Similarity',
+            'Jaccard Similarity',
+            'Cosine Similarity',
+            'Support Vector Machine',
+            'Random Forest',
+        ];
+        if (!in_array($actionType, $allowedActions, true)) {
+            return back()->withErrors('Pilih algoritma yang tersedia.');
+        }
 
         // Ambil atribut non-goal
         $atributs = DB::table('atribut')
@@ -261,11 +146,18 @@ class ConsultationController extends Controller
             ->orderBy('goal', 'desc')
             ->get();
 
+        // Pastikan kolom algoritma ada supaya penyimpanan tidak gagal di tabel lama
+        if (Schema::hasTable($table) && !Schema::hasColumn($table, 'algoritma')) {
+            Schema::table($table, function (Blueprint $table) {
+                $table->string('algoritma', 50)->default('')->after('case_num');
+            });
+        }
+
         // Payload insert
         $data = [
             'user_id'   => $user_id,
             'case_num'  => $user_id,
-            'algoritma' => $request->input('action_type'),
+            'algoritma' => $actionType,
         ];
 
         // Isi kolom atribut_id_nama = "valueId_valueName"
@@ -288,7 +180,7 @@ class ConsultationController extends Controller
             }
         }
 
-        if (count($data) <= 2) { // hanya user_id, case_num, algoritma → tak ada atribut terisi
+        if (count($data) <= 3) { // hanya user_id, case_num, algoritma - tak ada atribut terisi
             return back()->withErrors('Tidak ada nilai atribut yang diisi.');
         }
 
@@ -298,8 +190,6 @@ class ConsultationController extends Controller
 
         // Insert baris test case
         DB::table($table)->insert($data);
-
-        $actionType = $request->input('action_type');
 
         // === Matching Rule
         if ($actionType === 'Matching Rule') {
@@ -322,16 +212,44 @@ class ConsultationController extends Controller
                 ->with('success', 'Backward Chaining executed!');
         }
 
-        // === Support Vector Machine (train → infer → insert ke inferensi_user_{userId} + diagnostics)
+        // === Hybrid Similarity
+        if ($actionType === 'Hybrid Similarity') {
+            return redirect()
+                ->route('inference.hs', ['user_id' => $user_id, 'case_num' => $user_id])
+                ->with('success', 'Hybrid Similarity executed!');
+        }
+
+        // === Jaccard Similarity
+        if ($actionType === 'Jaccard Similarity') {
+            return redirect()
+                ->route('inference.jc', ['user_id' => $user_id, 'case_num' => $user_id])
+                ->with('success', 'Jaccard Similarity executed!');
+        }
+
+        // === Cosine Similarity
+        if ($actionType === 'Cosine Similarity') {
+            return redirect()
+                ->route('inference.cs', ['user_id' => $user_id, 'case_num' => $user_id])
+                ->with('success', 'Cosine Similarity executed!');
+        }
+
+        // === Random Forest
+        if ($actionType === 'Random Forest') {
+            return redirect()
+                ->route('randomforest.inference', ['user_id' => $user_id, 'case_num' => $user_id])
+                ->with('success', 'Random Forest executed!');
+        }
+
+        // === Support Vector Machine (train + infer + insert ke inferensi_user_{userId} + diagnostics)
         if ($actionType === 'Support Vector Machine') {
-            $kernel = $request->input('svm_kernel', 'sgd'); // contoh: sgd | rbf:D=128:gamma=0.25 | sigmoid:D=...
+            $kernel = $request->input('svm_kernel', 'sgd');
             $kernelShort = strtolower(explode(':', $kernel)[0]);
 
             $phpBin = $this->resolvePhpBinary();
 
             // DIAGNOSTICS
             $diag = [];
-            $diag[] = $this->diagLine('User ID', (string)$user_id);
+            $diag[] = $this->diagLine('User ID', (string) $user_id);
             $diag[] = $this->diagLine('Kernel', $kernel);
             $diag[] = $this->diagLine('Kernel short', $kernelShort);
             $diag[] = $this->diagLine('PHP BIN', $phpBin, is_file($phpBin) || Str::startsWith($phpBin, 'php'));
@@ -340,7 +258,9 @@ class ConsultationController extends Controller
             try {
                 $svmScript = $this->resolveScriptPath(env('SVM_SCRIPT'), [
                     'scripts/decision-tree/SVM.php',
-                    'app/SVM.php', 'app/Console/SVM.php', 'SVM.php',
+                    'app/SVM.php',
+                    'app/Console/SVM.php',
+                    'SVM.php',
                 ]);
                 $diag[] = $this->diagLine('SVM.php', $svmScript, true);
             } catch (\Throwable $e) {
@@ -350,10 +270,17 @@ class ConsultationController extends Controller
 
             // Count before (inferensi)
             $before = $this->countInferensi($user_id);
-            $diag[] = $this->diagLine('Inferensi before', (string)$before);
+            $diag[] = $this->diagLine('Inferensi before', (string) $before);
 
             // TRAIN
-            $trainCmd = $this->withPhpIniOverrides([$phpBin, $svmScript, (string)$user_id, (string)$user_id, $kernel, "--table={$table}"]);
+            $trainCmd = $this->withPhpIniOverrides([
+                $phpBin,
+                $svmScript,
+                (string) $user_id,
+                (string) $user_id,
+                $kernel,
+                "--table={$table}",
+            ]);
             $trainRes = $this->runProcess($trainCmd, 600);
             $diag[]   = $this->diagLine('Train CMD', $trainRes['cmd'], $trainRes['ok']);
 
@@ -371,7 +298,9 @@ class ConsultationController extends Controller
             try {
                 $inferScript = $this->resolveScriptPath(env('SVM_INFER_SCRIPT'), [
                     'scripts/decision-tree/SVMInfer.php',
-                    'app/SVMInfer.php', 'app/Console/SVMInfer.php', 'SVMInfer.php',
+                    'app/SVMInfer.php',
+                    'app/Console/SVMInfer.php',
+                    'SVMInfer.php',
                 ]);
                 $diag[] = $this->diagLine('SVMInfer.php', $inferScript, true);
             } catch (\Throwable $e) {
@@ -395,8 +324,8 @@ class ConsultationController extends Controller
             // AFTER
             $after = $this->countInferensi($user_id);
             $added = $after - $before;
-            $diag[] = $this->diagLine('Inferensi after', (string)$after, $after >= $before);
-            $diag[] = $this->diagLine('Rows added', (string)$added, $added >= 0);
+            $diag[] = $this->diagLine('Inferensi after', (string) $after, $after >= $before);
+            $diag[] = $this->diagLine('Rows added', (string) $added, $added >= 0);
 
             if (!$inferRes['ok']) {
                 $msg = "SVM Inference gagal.\n\nCMD:\n{$inferRes['cmd']}\n\nSTDERR:\n{$inferRes['stderr']}\n\nSTDOUT:\n{$inferRes['stdout']}";
@@ -534,7 +463,7 @@ class ConsultationController extends Controller
     private function runProcess(array $cmd, int $timeoutSec = 600): array
     {
         // Hindari request web dipotong 30s saat menunggu proses CLI berat
-        @ini_set('max_execution_time', (string)$timeoutSec);
+        @ini_set('max_execution_time', (string) $timeoutSec);
         @set_time_limit($timeoutSec);
         @ignore_user_abort(true);
 
@@ -555,9 +484,13 @@ class ConsultationController extends Controller
      */
     private function withPhpIniOverrides(array $cmd): array
     {
-        if (empty($cmd)) return $cmd;
-        $bin = strtolower((string)($cmd[0] ?? ''));
-        if (!str_contains($bin, 'php')) return $cmd;
+        if (empty($cmd)) {
+            return $cmd;
+        }
+        $bin = strtolower((string) ($cmd[0] ?? ''));
+        if (!str_contains($bin, 'php')) {
+            return $cmd;
+        }
 
         $memoryLimit = env('SVM_MEMORY_LIMIT', '1024M');
         $opts = ['-d', 'max_execution_time=0'];
@@ -605,15 +538,16 @@ class ConsultationController extends Controller
         $lower = strtolower($phpBin);
         if (Str::endsWith($lower, 'php-cgi.exe')) {
             $cli = str_replace('php-cgi.exe', 'php.exe', $phpBin);
-            if (is_file($cli)) $phpBin = $cli;
+            if (is_file($cli)) {
+                $phpBin = $cli;
+            }
         }
         return $phpBin;
     }
 
     private function diagLine(string $key, string $value, bool $ok = true): string
     {
-        $mark = $ok ? '✅' : '❌';
+        $mark = $ok ? 'ok' : '??';
         return "{$mark} {$key}: {$value}";
     }
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 }

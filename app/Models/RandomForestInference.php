@@ -2,11 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 
-class ForwardChaining extends Model
+class RandomForestInference extends Model
 {
     protected $primaryKey = 'inf_id';
 
@@ -16,22 +15,19 @@ class ForwardChaining extends Model
         'rule_goal',
         'match_value',
         'cocok',
+        'waktu',
     ];
 
-    // Menonaktifkan timestamps (created_at, updated_at)
     public $timestamps = false;
 
     protected $table;
 
     public function setTableForUser($userId)
     {
-        $this->table = 'inferensi_fc_user_' . $userId;
+        $this->table = 'inferensi_rf_user_' . $userId;
         return $this;
     }
 
-    /**
-     * Check if the table exists in the database.
-     */
     public function tableExists()
     {
         return DB::getSchemaBuilder()->hasTable($this->table);
@@ -44,9 +40,8 @@ class ForwardChaining extends Model
                 ->orderByDesc('inf_id')
                 ->limit(500)
                 ->get();
-        } else {
-            // Return empty collection if the table doesn't exist
-            return collect([]);
         }
+
+        return collect([]);
     }
 }
