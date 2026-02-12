@@ -10,9 +10,6 @@
         // Periksa apakah tabel ada
         $tableExists = $ruleModel->tableExists();
         $rules = $tableExists ? $ruleModel->getRules() : collect();
-<<<<<<< HEAD
-=======
-
         // Pagination sederhana di level view
         $perPage = 10;
         $page    = max((int) request()->input('page', 1), 1);
@@ -23,7 +20,6 @@
             $page,
             ['path' => request()->url(), 'query' => request()->query()]
         );
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
         
         $kasus = \App\Models\Kasus::where('case_num', $user->user_id)->first();
     @endphp
@@ -53,49 +49,6 @@
         </ol>
     @else
         <div class="card-body">
-<<<<<<< HEAD
-            <table class="table table-bordered">
-                <thead>
-                    <tr>
-                        <th>No</th>
-                        <th>Case Title</th>
-                        <th>Rule If</th>
-                        <th>Rule Then</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($rules as $index => $rule )
-                    <tr>
-                        <td>{{ $index + 1 }}</td>
-                        <td>{{ $kasus->case_title }}</td>
-                        <td>
-                            @php
-                                $cleanedIfPart = preg_replace('/\b\d+_/', ' ', $rule->if_part);
-                                $cleanedIfPart = str_replace('_', ' ', $cleanedIfPart);
-                                $cleanedIfPart = str_replace('-', ' ', $cleanedIfPart);
-                                $cleanedIfPart = str_replace('=', ' =', $cleanedIfPart);
-                            @endphp
-                            {{ $cleanedIfPart }}
-                        </td>
-                        <td>
-                            @php
-                                $cleanedIfPart = preg_replace('/\b\d+_/', ' ', $rule->then_part);
-                                $cleanedIfPart = str_replace('_', ' ', $cleanedIfPart);
-                                
-                                $cleanedIfPart = str_replace('-', ' ', $cleanedIfPart);
-                                $cleanedIfPart = str_replace('=', ' =', $cleanedIfPart);
-                            @endphp
-                            {{ $cleanedIfPart }}
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
-    @endif
-
-@endsection
-=======
             <div class="table-responsive">
                 <table class="table table-bordered mb-0">
                     <thead>
@@ -142,4 +95,3 @@
     @endif
 
 @endsection
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714

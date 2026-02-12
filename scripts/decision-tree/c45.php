@@ -23,11 +23,9 @@ echo "Contoh hasil: Decision tree generated with $user_id and $case_num";
 //definisikan variabel awal
 $entropy=0;$entropyss=0;$treelevel=0;$parent_node="0"; $goal="F";$Child_node="0";
 // Create connection
-<<<<<<< HEAD
-$conn = new mysqli($servername, $username, $password, $dbname);
-=======
-$conn = new mysqli($servername, $username, $password, $dbname, 3307);
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
+$dbport = getenv('DB_PORT');
+$port = ($dbport !== false && $dbport !== '') ? (int) $dbport : 3306;
+$conn = new mysqli($servername, $username, $password, $dbname, $port);
 // Check connection
 if ($conn->connect_error) {
   die("Connection failed: " . $conn->connect_error);

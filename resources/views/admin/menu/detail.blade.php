@@ -13,34 +13,25 @@
     $inferensi = new \App\Models\Inferensi();
     $inferensi->setTableForUser($user->user_id);
     $tableExists1 = $inferensi->tableExists();
-<<<<<<< HEAD
-    $inference1 = $tableExists1 ? $inferensi->getRules()->map(function($item) {
+    $inference1 = $tableExists1 ? $inferensi->getRules()->map(function ($item) {
         $item->source_algorithm = 'Matching Rule';
         return $item;
     }) : collect();
-=======
-    $inference1 = $tableExists1 ? $inferensi->getRules() : collect();
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 
     // Ambil data dari inferensi_fc_user_{userId}
     $inferensiFC = new \App\Models\ForwardChaining();
     $inferensiFC->setTableForUser($user->user_id);
     $tableExists2 = $inferensiFC->tableExists();
-<<<<<<< HEAD
-    $inference2 = $tableExists2 ? $inferensiFC->getRules()->map(function($item) {
+    $inference2 = $tableExists2 ? $inferensiFC->getRules()->map(function ($item) {
         $item->source_algorithm = 'Forward Chaining';
         return $item;
     }) : collect();
-=======
-    $inference2 = $tableExists2 ? $inferensiFC->getRules() : collect();
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 
     // Ambil data dari inferensi_bc_user_{userId}
     $inferensiBC = new \App\Models\BackwardChaining();
     $inferensiBC->setTableForUser($user->user_id);
     $tableExists3 = $inferensiBC->tableExists();
-<<<<<<< HEAD
-    $inference3 = $tableExists3 ? $inferensiBC->getRules()->map(function($item) {
+    $inference3 = $tableExists3 ? $inferensiBC->getRules()->map(function ($item) {
         $item->source_algorithm = 'Backward Chaining';
         return $item;
     }) : collect();
@@ -49,7 +40,7 @@
     $inferensiHS = new \App\Models\HybridSimilarity();
     $inferensiHS->setTableForUser($user->user_id);
     $tableExists4 = $inferensiHS->tableExists();
-    $inference4 = $tableExists4 ? $inferensiHS->getRules()->map(function($item) {
+    $inference4 = $tableExists4 ? $inferensiHS->getRules()->map(function ($item) {
         $item->source_algorithm = 'Hybrid Similarity';
         return $item;
     }) : collect();
@@ -58,7 +49,7 @@
     $inferensiJC = new \App\Models\JaccardSimilarity();
     $inferensiJC->setTableForUser($user->user_id);
     $tableExists5 = $inferensiJC->tableExists();
-    $inference5 = $tableExists5 ? $inferensiJC->getRules()->map(function($item) {
+    $inference5 = $tableExists5 ? $inferensiJC->getRules()->map(function ($item) {
         $item->source_algorithm = 'Jaccard Similarity';
         return $item;
     }) : collect();
@@ -67,8 +58,17 @@
     $inferensiCS = new \App\Models\CosineSimilarity();
     $inferensiCS->setTableForUser($user->user_id);
     $tableExists6 = $inferensiCS->tableExists();
-    $inference6 = $tableExists6 ? $inferensiCS->getRules()->map(function($item) {
+    $inference6 = $tableExists6 ? $inferensiCS->getRules()->map(function ($item) {
         $item->source_algorithm = 'Cosine Similarity';
+        return $item;
+    }) : collect();
+
+    // Ambil data dari inferensi_rf_user_{userId}
+    $inferensiRF = new \App\Models\RandomForestInference();
+    $inferensiRF->setTableForUser($user->user_id);
+    $tableExists7 = $inferensiRF->tableExists();
+    $inference7 = $tableExists7 ? $inferensiRF->getRules()->map(function ($item) {
+        $item->source_algorithm = 'Random Forest';
         return $item;
     }) : collect();
 
@@ -78,13 +78,9 @@
         ->merge($inference3)
         ->merge($inference4)
         ->merge($inference5)
-        ->merge($inference6);
-=======
-    $inference3 = $tableExists3 ? $inferensiBC->getRules() : collect();
+        ->merge($inference6)
+        ->merge($inference7);
 
-    // Gabungkan data inferensi dan filter berdasarkan case_id yang dipilih
-    $allInference = $inference1->merge($inference2)->merge($inference3);
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
     $selectedInference = $allInference->where('case_id', $selectedCaseId);
 
     $kasus = \App\Models\Kasus::where('case_num', $user->user_id)->first();
@@ -104,7 +100,7 @@
     $validAtributs = DB::table('atribut')
             ->where('user_id', $user->user_id)
             ->where('goal', '!=', 'T')
-            ->pluck('atribut_name', 'atribut_id'); 
+            ->pluck('atribut_name', 'atribut_id');
 
     // Filter kolom hanya untuk atribut yang valid
     $filteredColumns = array_filter($columns, function ($column) use ($validAtributs, $columns) {
@@ -120,65 +116,6 @@
 @if ($selectedInference->isEmpty())
     <p class="alert alert-warning">You have no detail for Id {{ $selectedCaseId }}</p>
 @else
-<<<<<<< HEAD
-    <table class="table table-bordered">
-        @foreach ($selectedInference as $detail)
-        <tr>
-            <th>Id</th>
-            <td>{{ $detail->case_id }}</td>
-        </tr>
-        <tr>
-            <th>Rule Id</th>
-            <td>{{ $detail->rule_id }}</td>
-        </tr>
-        <tr>
-            <th>Match Value</th>
-            <td>{{ $detail->match_value }}</td>
-        </tr>
-        @endforeach
-
-        <tr>
-            <td colspan="100%">Your Consultation </td>
-        </tr>
-        
-        @foreach ($testCases as $index => $row)
-        {{-- Tambahkan bagian ini untuk menampilkan kolom yang difilter --}}
-            @foreach($filteredColumns as $column)
-            @if(!in_array($column, $excludeColumns))
-                    <th>{{ str_replace('_', ' ', preg_replace('/\b\d+_/', ' ', $column)) }}</th>
-                    <td>
-                        @php
-                            $cleanedIfPart = preg_replace('/\b\d+_/', ' ', $row->$column,);
-                            $cleanedIfPart = str_replace('_', ' ', $cleanedIfPart);
-                            $cleanedIfPart = str_replace('-', ' ', $cleanedIfPart);
-                        @endphp
-                        {{ $cleanedIfPart }}
-                    </td>
-                </tr>
-                @endif
-            @endforeach
-        @endforeach
-        <br>
-        <tr>
-            <td colspan="100%">Your Consultation Goal</td>
-        </tr>
-        
-        @foreach ($selectedInference as $detail)
-        <tr>
-            <th>Goal</th>
-            <td>{{ str_replace(['_', '-', '='], [' ', ' ', ' ='], preg_replace('/\b\d+_/', ' ', $detail->rule_goal)) }}</td>
-        </tr>
-        <tr>
-            <th>Algorithm</th>
-            <td>{{ $detail->source_algorithm ?? ($algorithms[$detail->case_id] ?? 'Unknown') }}</td>
-        </tr>
-        <tr>
-            <th>Execution Time</th>
-            <td>{{ $detail->waktu ?? '-' }}</td>
-        </tr>
-        @endforeach
-    </table>
-=======
     <div class="table-responsive">
         <table class="table table-bordered mb-0">
             <tbody>
@@ -193,7 +130,12 @@
                 </tr>
                 <tr>
                     <th>Match Value</th>
-                    <td>{{ number_format((float) $detail->match_value, 4, '.', '') }}</td>
+                    <td>
+                        @php
+                            $mv = $detail->match_value;
+                        @endphp
+                        {{ is_numeric($mv) ? number_format((float) $mv, 4, '.', '') : $mv }}
+                    </td>
                 </tr>
 
                 <tr>
@@ -242,20 +184,23 @@
                     <th>Algorithm</th>
                     <td>
                         @php
-                            $algo = $algorithmName;
-                            $rg   = strtolower((string)($detail->rule_goal ?? ''));
-                            if (!$algo) {
-                                if (str_contains($rg, 'forward')) {
-                                    $algo = 'Forward Chaining';
-                                } elseif (str_contains($rg, 'backward')) {
-                                    $algo = 'Backward Chaining';
-                                } elseif (str_contains($rg, 'matching')) {
-                                    $algo = 'Matching Rule';
-                                } elseif (str_contains($rg, 'kernel=')) {
-                                    $algo = 'Support Vector Machine';
-                                }
-                            }
-                        @endphp
+                    $algo = $detail->source_algorithm ?? $algorithmName;
+                    $rg   = strtolower((string) ($detail->rule_goal ?? ''));
+                    $rid  = strtolower((string) ($detail->rule_id ?? ''));
+                    if (!$algo || $algo === 'Unknown') {
+                        if (str_contains($rg, 'forward')) {
+                            $algo = 'Forward Chaining';
+                        } elseif (str_contains($rg, 'backward')) {
+                            $algo = 'Backward Chaining';
+                        } elseif (str_contains($rg, 'matching')) {
+                            $algo = 'Matching Rule';
+                        } elseif (str_contains($rg, 'kernel=') || $rid === 'svm') {
+                            $algo = 'Support Vector Machine';
+                        } elseif ($rid === 'rf') {
+                            $algo = 'Random Forest';
+                        }
+                    }
+                @endphp
                         {{ $algo ?? 'Unknown' }}
                     </td>
                 </tr>
@@ -272,7 +217,6 @@
             </tbody>
         </table>
     </div>
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 @endif
 
 <a href="{{ url('/inference') }}" class="btn btn-secondary">Back</a>

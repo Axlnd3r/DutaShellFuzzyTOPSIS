@@ -4,40 +4,27 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-<<<<<<< HEAD
 use Illuminate\Support\Facades\Redirect;
-=======
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 
 class InferenceController extends Controller
 {
     public function generateInference($user_id, $case_num)
     {
-<<<<<<< HEAD
         $user_id = Auth::id();  // Mendapatkan user_id dari user yang sedang login
         $case_num = $user_id;    // Menetapkan case_num sama dengan user_id
 
         $command = 'php "' . base_path('scripts/decision-tree/matching_rule.php') . '" ' . $user_id . ' ' . $case_num;
-
-=======
-        $user_id  = Auth::user()->user_id;  // ← konsisten
-        $case_num = $user_id;
-
-        $command = 'php "' . base_path('scripts/decision-tree/matching_rule.php') . '" ' . $user_id . ' ' . $case_num;
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
         $output = shell_exec($command);
 
-        return view('admin.menu.inferensi', compact('output', 'case_num'))->with('success', 'Inference updated successfully!'); 
+        return view('admin.menu.inferensi', compact('output', 'case_num'))->with('success', 'Inference updated successfully!');
     }
 
     public function generate($user_id, $case_num)
     {
-<<<<<<< HEAD
         $user_id = Auth::id();  // Mendapatkan user_id dari user yang sedang login
         $case_num = $user_id;    // Menetapkan case_num sama dengan user_id
 
         $command = 'php "' . base_path('scripts/decision-tree/matching_rule.php') . '" ' . $user_id . ' ' . $case_num;
-
         $output = shell_exec($command);
 
         // Kembalikan ke view inferensi
@@ -72,17 +59,8 @@ class InferenceController extends Controller
             $cleanOutput = trim(substr($output, 0, $pos));
         }
 
-        return Redirect::to('/inference')->with('eval_output', $cleanOutput ?: 'No output')->with('eval_matrix', $matrix);
+        return Redirect::to('/inference')
+            ->with('eval_output', $cleanOutput ?: 'No output')
+            ->with('eval_matrix', $matrix);
     }
-
-=======
-        $user_id  = Auth::user()->user_id;  // ← konsisten
-        $case_num = $user_id;
-
-        $command = 'php "' . base_path('scripts/decision-tree/matching_rule.php') . '" ' . $user_id . ' ' . $case_num;
-        $output = shell_exec($command);
-
-        return view('admin.menu.inferensi', compact('output', 'case_num'))->with('success', 'Inference updated successfully!');
-    }
->>>>>>> 1caa14645c69b47910ab957c1380a891efae9714
 }
