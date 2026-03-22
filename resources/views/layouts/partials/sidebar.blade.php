@@ -24,45 +24,51 @@
                 </nav>
             </div>
 
-            <a class="nav-link" href="{{ url('generateCase') }}">
+            <a class="nav-link {{ request()->is('generateCase*') ? 'active' : '' }}" href="{{ url('generateCase') }}">
                     <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                     Generate Case
                 </a>
 
-            <a class="nav-link" href="{{ url('tree') }}">
+            <a class="nav-link {{ request()->is('tree*') ? 'active' : '' }}" href="{{ url('tree') }}">
                 <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                 Decision Tree
             </a>
 
-            <a class="nav-link" href="{{ url('SupportVectorMachine') }}">
+            <a class="nav-link {{ request()->is('SupportVectorMachine*') ? 'active' : '' }}" href="{{ url('SupportVectorMachine') }}">
                 <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                 Support Vector Machine
             </a>
 
-            <a class="nav-link {{ request()->is('randomforest*') ? 'active' : '' }}" href="{{ url('randomforest') }}">
+            <a class="nav-link {{ (request()->is('randomforest*') || request()->routeIs('randomforest.*')) ? 'active text-white' : '' }}" href="{{ route('randomforest.index') }}">
                 <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                 Random Forest
             </a>
 
-            <a class="nav-link" href="{{ url('rule') }}">
+            <a class="nav-link {{ request()->is('HybridSim*') ? 'active' : '' }}" href="{{ route('HybridSim.show') }}">
+                <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
+                Hybrid Similarity
+            </a>
+
+            <a class="nav-link {{ request()->is('evaluation*') ? 'active' : '' }}" href="{{ route('evaluation.show') }}">
+                <div class="sb-nav-link-icon"><i class="fas fa-chart-bar"></i></div>
+                Evaluasi Perbandingan
+            </a>
+
+            <a class="nav-link {{ request()->is('rule*') ? 'active' : '' }}" href="{{ url('rule') }}">
                 <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                 Rule
             </a>
 
-            <a class="nav-link" href="{{ url('consultation') }}">
+            <a class="nav-link {{ request()->is('consultation*') ? 'active' : '' }}" href="{{ url('consultation') }}">
                 <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                 Consultation
             </a>
 
-            <a class="nav-link" href="{{ url('inference') }}">
+            <a class="nav-link {{ request()->is('history*') ? 'active' : '' }}" href="{{ url('history') }}">
                 <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
                 History
             </a>
-{{-- 
-            <a class="nav-link" href="{{ url('forwardChaining') }}">
-                <div class="sb-nav-link-icon"><i class="fas fa-tachometer-alt"></i></div>
-                Forward Chaining
-            </a> --}}
+
         </div>
     </div>
 </nav>

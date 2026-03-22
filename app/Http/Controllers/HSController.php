@@ -13,9 +13,9 @@ class HSController extends Controller
 
         $command = 'php "' . base_path('scripts/decision-tree/hybrid_similarity.php') . '" ' . $user_id . ' ' . $case_num;
 
-        $output = shell_exec($command);
+        $output = shell_exec($command . ' 2>&1');
 
-        return view('admin.menu.inferensi', compact('output', 'case_num'))->with('success', 'Hybrid Similarity executed!');
+        return redirect('/history')->with('success', 'Hybrid Similarity executed! ' . ($output ? '| Debug: ' . $output : ''));
     }
 }
 

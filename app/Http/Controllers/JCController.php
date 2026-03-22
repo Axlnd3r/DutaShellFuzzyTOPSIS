@@ -12,9 +12,9 @@ class JCController extends Controller
         $case_num = $user_id;
 
         $command = 'php "' . base_path('scripts/decision-tree/hybrid_similarity.php') . '" ' . $user_id . ' ' . $case_num . ' jaccard';
-        $output = shell_exec($command);
+        $output = shell_exec($command . ' 2>&1');
 
-        return view('admin.menu.inferensi', compact('output', 'case_num'))->with('success', 'Jaccard Similarity executed!');
+        return redirect('/history')->with('success', 'Jaccard Similarity executed! ' . ($output ? '| Debug: ' . $output : ''));
     }
 }
 

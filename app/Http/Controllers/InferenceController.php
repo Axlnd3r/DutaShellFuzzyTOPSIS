@@ -16,7 +16,7 @@ class InferenceController extends Controller
         $command = 'php "' . base_path('scripts/decision-tree/matching_rule.php') . '" ' . $user_id . ' ' . $case_num;
         $output = shell_exec($command);
 
-        return view('admin.menu.inferensi', compact('output', 'case_num'))->with('success', 'Inference updated successfully!');
+        return redirect('/history')->with('success', 'Matching Rule executed!');
     }
 
     public function generate($user_id, $case_num)
@@ -27,10 +27,10 @@ class InferenceController extends Controller
         $command = 'php "' . base_path('scripts/decision-tree/matching_rule.php') . '" ' . $user_id . ' ' . $case_num;
         $output = shell_exec($command);
 
-        // Kembalikan ke view inferensi
-        return view('admin.menu.inferensi', compact('output', 'case_num'))->with('success', 'Inference updated successfully!');
+        return redirect('/history')->with('success', 'Matching Rule executed!');
     }
 
+    //Punya Alex 
     public function evaluate(Request $request)
     {
         $user_id = Auth::id();

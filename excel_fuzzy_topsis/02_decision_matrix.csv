@@ -1,0 +1,31 @@
+STEP 1: DECISION MATRIX (Similarity Scores),,,,
+,,,,
+Rumus Kategorik: exact match = 1.0 | tidak match = 0.0,,,,
+Rumus Numerik: 1 - |base - test| / range,,,,
+Range Umur: max(3,7,2,4) - min(3,7,2,4) = 7 - 2 = 5,,,,
+,,,,
+=== SIMILARITY PER ATRIBUT ===,,,,
+,,,,
+Demam (Kategorik):,,,,
+Case,Base,Test,Match?,Similarity
+K1,True,True,Ya,1.00
+K2,False,True,Tidak,0.00
+K3,True,True,Ya,1.00
+,,,,
+Nafsu_Makan (Kategorik):,,,,
+Case,Base,Test,Match?,Similarity
+K1,Buruk,Buruk,Ya,1.00
+K2,Baik,Buruk,Tidak,0.00
+K3,Baik,Buruk,Tidak,0.00
+,,,,
+Umur (Numerik, range=5):,,,,
+Case,Base,Test,Rumus,Similarity
+K1,3,4,1-|3-4|/5 = 1-0.2,0.80
+K2,7,4,1-|7-4|/5 = 1-0.6,0.40
+K3,2,4,1-|2-4|/5 = 1-0.4,0.60
+,,,,
+=== DECISION MATRIX LENGKAP ===,,,,
+Case,C1 (Demam),C2 (Nafsu),C3 (Umur),
+K1,1.00,1.00,0.80,
+K2,0.00,0.00,0.40,
+K3,1.00,0.00,0.60,

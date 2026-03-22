@@ -29,7 +29,6 @@ class AuthController extends Controller
         //proses input
         $user = new User();
         $user->username = $request-> username;
-        $user->role = 'user';     // default role
         $user->active = 'T';      // mark new user active
         $user->password = bcrypt($request-> password);
         $user->save();

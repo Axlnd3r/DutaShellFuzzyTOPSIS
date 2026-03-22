@@ -37,8 +37,17 @@
     <h1 class="mt-4">Consultation for User:{{ $user->username }}</h1>
  
     @if(session('success'))
-        <div class="alert alert-success">
-            {{ session('success') }}
+        <div class="alert alert-success">{{ session('success') }}</div>
+    @endif
+    @if(session('error'))
+        <div class="alert alert-danger" style="white-space:pre-wrap">{{ session('error') }}</div>
+    @endif
+    @if(session('svm_diag'))
+        <div class="alert alert-secondary">
+            <details open>
+                <summary><strong>SVM Diagnostics</strong></summary>
+                <pre class="mt-2 mb-0" style="white-space:pre-wrap">{{ session('svm_diag') }}</pre>
+            </details>
         </div>
     @endif
 

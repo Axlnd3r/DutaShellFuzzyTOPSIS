@@ -1,15 +1,32 @@
 <?php
 // File ini untuk membentuk aturan hasil dari algoritma c45
 
-// menghubungkan ke database
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "expertt";
+// Load database config from Laravel .env
+$envPath = __DIR__ . '/../../.env';
+$dbConfig = [
+    'host' => '127.0.0.1',
+    'port' => 3306,
+    'database' => 'expertt',
+    'username' => 'root',
+    'password' => ''
+];
+
+if (file_exists($envPath)) {
+    $envContent = file_get_contents($envPath);
+    if (preg_match('/^DB_HOST=(.*)$/m', $envContent, $m)) $dbConfig['host'] = trim($m[1]);
+    if (preg_match('/^DB_PORT=(\d+)/m', $envContent, $m)) $dbConfig['port'] = (int)trim($m[1]);
+    if (preg_match('/^DB_DATABASE=(.*)$/m', $envContent, $m)) $dbConfig['database'] = trim($m[1]);
+    if (preg_match('/^DB_USERNAME=(.*)$/m', $envContent, $m)) $dbConfig['username'] = trim($m[1]);
+    if (preg_match('/^DB_PASSWORD=(.*)$/m', $envContent, $m)) $dbConfig['password'] = trim($m[1]);
+}
+
+$servername = $dbConfig['host'];
+$username = $dbConfig['username'];
+$password = $dbConfig['password'];
+$dbname = $dbConfig['database'];
+$port = $dbConfig['port'];
 
 // Create connection
-$dbport = getenv('DB_PORT');
-$port = ($dbport !== false && $dbport !== '') ? (int) $dbport : 3306;
 $conn = new mysqli($servername, $username, $password, $dbname, $port);
 // Check connection
 if ($conn->connect_error) {

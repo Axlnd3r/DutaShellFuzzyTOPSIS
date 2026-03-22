@@ -3,16 +3,19 @@
 namespace App\Http\Controllers;
 
 use App\Support\SvmModelLocator;
+use App\Services\SvmTrainerService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Schema;
-use Symfony\Component\Process\PhpExecutableFinder;
-use Symfony\Component\Process\Process;
 
 class SVMController extends Controller
 {
+    public function __construct(private SvmTrainerService $trainer)
+    {
+    }
+
     /** Halaman UI */
     public function show()
     {
@@ -453,63 +456,19 @@ class SVMController extends Controller
         bool $redirectBack = true,
         ?string $tableOverride = null
     ) {
-        // Pastikan eksekusi web tidak dipotong 30s (nginx/apache) saat menunggu proses CLI
+        // Pastikan eksekusi web tidak dipotong 30s saat training berjalan
         @ini_set('max_execution_time', '0');
         @set_time_limit(0);
         @ignore_user_abort(true);
 
-        $phpBin = env('PHP_BIN');
-        if (!$phpBin) {
-            $finder = new PhpExecutableFinder();
-            $phpBin = $finder->find(false) ?: 'php';
-        }
-        $lower = strtolower($phpBin);
-        if (str_ends_with($lower, 'php-cgi.exe')) {
-            $cli = str_replace('php-cgi.exe', 'php.exe', $phpBin);
-            if (is_file($cli)) $phpBin = $cli;
-        }
-
         try {
-            $script = $this->resolveScriptPath(env('SVM_SCRIPT'));
-        } catch (\Throwable $e) {
-            $msg = $e->getMessage();
-            return $redirectBack
-                ? redirect()->route('SVM.show')->with('svm_err', $msg)
-                : ['error' => true, 'message' => $msg];
-        }
-
-        $memoryLimit = env('SVM_MEMORY_LIMIT', '1024M');
-        $cmd = [$phpBin, '-d', 'max_execution_time=0'];
-        if ($memoryLimit) {
-            $cmd[] = '-d';
-            $cmd[] = 'memory_limit=' . $memoryLimit;
-        }
-        $cmd[] = $script;
-        $cmd[] = (string)$userId;
-        $cmd[] = (string)$caseNum;
-        $cmd[] = $kernel;
-        if ($tableOverride) $cmd[] = "--table={$tableOverride}";
-
-        $proc = new Process($cmd, base_path(), null, null, 600);
-
-        try {
-            $proc->run();
-            $stdout = $proc->getOutput();
-            $stderr = $proc->getErrorOutput();
-
-            if (!$proc->isSuccessful()) {
-                $cmdStr = implode(' ', array_map(fn ($p) => str_contains($p, ' ') ? "\"$p\"" : $p, $cmd));
-                $msg = "Training gagal.\nCommand : {$cmdStr}\n\nStderr:\n{$stderr}\n\nOutput:\n{$stdout}";
-                return $redirectBack
-                    ? redirect()->route('SVM.show')->with('svm_err', $msg)
-                    : ['error' => true, 'message' => $msg, 'stdout' => $stdout, 'stderr' => $stderr, 'cmd' => $cmdStr];
-            }
-
-            $json = $this->extractLastJson($stdout);
+            $trained = $this->trainer->train($userId, $caseNum, $kernel, $tableOverride);
+            $stdout = trim((string)($trained['stdout'] ?? 'Training selesai.'));
+            $json = is_array($trained['json'] ?? null) ? $trained['json'] : [];
 
             return $redirectBack
-                ? redirect()->route('SVM.show')->with('svm_ok', trim($stdout))
-                : ['error'=>false, 'stdout'=>trim($stdout), 'json'=>$json];
+                ? redirect()->route('SVM.show')->with('svm_ok', $stdout)
+                : ['error'=>false, 'stdout'=>$stdout, 'json'=>$json];
 
         } catch (\Throwable $e) {
             $msg = "Exception saat training: " . $e->getMessage();

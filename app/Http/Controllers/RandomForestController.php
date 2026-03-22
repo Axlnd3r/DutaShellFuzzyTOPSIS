@@ -646,15 +646,29 @@ class RandomForestController extends Controller
                 $table->enum('cocok', ['1', '0'])->default('1');
                 $table->integer('user_id');
                 $table->decimal('waktu', 16, 14)->default(0);
+                $table->timestamp('created_at')->useCurrent();
             });
         } else {
-            DB::table($inferTable)->truncate();
+            // Tambah kolom created_at jika belum ada (untuk tabel lama)
+            if (!Schema::hasColumn($inferTable, 'created_at')) {
+                Schema::table($inferTable, function (Blueprint $table) {
+                    $table->timestamp('created_at')->useCurrent();
+                });
+            }
         }
+
+        // Ambil case_id yang sudah diproses untuk menghindari duplikasi
+        $processedCaseIds = DB::table($inferTable)->pluck('case_id')->toArray();
 
         $encoding = (new Filesystem($modelPath))->load();
         $model = (new Native())->deserialize($encoding);
 
         foreach ($caseRows as $row) {
+            // Skip jika case_id sudah pernah diproses
+            if (in_array($row->case_id, $processedCaseIds)) {
+                continue;
+            }
+
             $encoded = [];
             foreach ($featureKeys as $key) {
                 $value = $row->{$key} ?? null;
@@ -687,11 +701,11 @@ class RandomForestController extends Controller
                 'cocok' => '1',
                 'user_id' => $userId,
                 'waktu' => $elapsed,
+                'created_at' => now(),
             ]);
         }
 
-        return redirect()
-            ->route('test.case.form')
+        return redirect('/history')
             ->with('success', 'Inference Random Forest updated successfully!');
     }
 }

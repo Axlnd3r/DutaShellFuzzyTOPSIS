@@ -16,7 +16,7 @@ class FCController extends Controller
 
         $output = shell_exec($command);
 
-        return view('admin.menu.inferensi', compact('output', 'case_num'))->with('success', 'Inference updated successfully!'); 
+        return redirect('/history')->with('success', 'Forward Chaining executed!'); 
     
     }
 }

@@ -18,6 +18,7 @@
             'jc' => 5,
             'cs' => 6,
             'rf' => 7,
+            'ft' => 8,
         ];
         $r->_algo_rank = $rankMap[$src] ?? 9;
 
@@ -41,6 +42,7 @@
         elseif ($src === 'jc')  { $prefix = 'JC-'; }
         elseif ($src === 'cs')  { $prefix = 'CS-'; }
         elseif ($src === 'rf')  { $prefix = 'RF-'; }
+        elseif ($src === 'ft')  { $prefix = 'FT-'; }
         else                    { $prefix = $isSvm ? 'SVM-' : 'MR-'; }
 
         $r->_disp_id = $lid !== null ? ($prefix . $lid) : ($prefix . '?');
@@ -97,14 +99,22 @@
         ? $mdlRF->getRules()->map(function($r) use ($setCommon){ return $setCommon($r, 'rf'); })
         : collect();
 
-    $all = $rows1->merge($rows2)->merge($rows3)->merge($rows4)->merge($rows5)->merge($rows6)->merge($rows7)
-        ->sortBy(function($r) {
-            $ts = is_int($r->_ts) ? $r->_ts : 9_999_999_999_999;
+    // Fuzzy TOPSIS
+    $mdlFT = new \App\Models\FuzzyTopsisInference();
+    $mdlFT->setTableForUser($user->user_id);
+    $t8Exists = $mdlFT->tableExists();
+    $rows8    = $t8Exists
+        ? $mdlFT->getRules()->map(function($r) use ($setCommon){ return $setCommon($r, 'ft'); })
+        : collect();
+
+    $all = $rows1->merge($rows2)->merge($rows3)->merge($rows4)->merge($rows5)->merge($rows6)->merge($rows7)->merge($rows8)
+        ->sortByDesc(function($r) {
+            $ts = is_int($r->_ts) ? $r->_ts : 0;
             $rid = (string) ($r->inf_id ?? $r->id ?? '');
             $ridKey = (ctype_digit($rid) && $rid !== '')
                 ? str_pad($rid, 20, '0', STR_PAD_LEFT)
                 : 'Z' . $rid;
-            return sprintf('%013d-%02d-%s', $ts, (int) ($r->_algo_rank ?? 9), $ridKey);
+            return sprintf('%013d-%s', $ts, $ridKey);
         })
         ->values();
 
@@ -147,6 +157,7 @@
         if ($src === 'jc') return 'Jaccard Similarity';
         if ($src === 'cs') return 'Cosine Similarity';
         if ($src === 'rf') return 'Random Forest';
+        if ($src === 'ft') return 'Fuzzy TOPSIS';
 
         $ruleId   = strtoupper((string) ($row->rule_id ?? ''));
         $ruleGoal = (string) ($row->rule_goal ?? $row->goal ?? '');
@@ -163,17 +174,19 @@
     $cJC    = $rows5->count();
     $cCS    = $rows6->count();
     $cRF    = $rows7->count();
+    $cFT    = $rows8->count();
     $cAll   = $all->count();
 
     if ($search !== '') {
         $needle = strtolower($search);
-        $all = $all->filter(function($row) use ($needle, $formatRuleGoal, $kasus) {
+        $all = $all->filter(function($row) use ($needle, $formatRuleGoal, $renderAlgo, $kasus) {
             $fields = [
                 $row->_disp_id ?? '',
                 $row->case_title ?? ($kasus->case_title ?? ''),
                 $row->rule_id ?? '',
                 $row->rule_goal ?? $row->goal ?? '',
                 $formatRuleGoal($row),
+                $renderAlgo($row),
                 $row->_source ?? '',
                 $row->match_value ?? $row->score ?? '',
             ];
@@ -192,7 +205,9 @@
 
     $cFiltered = $all->count();
 
-    $perPage = 10;
+    $perPageOptions = [10, 25, 50, 100];
+    $perPage = (int) request()->input('per_page', 10);
+    if (!in_array($perPage, $perPageOptions)) $perPage = 10;
     $page    = max((int) request()->input('page', 1), 1);
     $paged   = new \Illuminate\Pagination\LengthAwarePaginator(
         $all->slice(($page - 1) * $perPage, $perPage),
@@ -240,9 +255,52 @@
             if ($actual === $pred) $matrices[$algo]['correct']++;
         }
     }
+
+    // === Fuzzy TOPSIS Confusion Matrix ===
+    $ftConfusion = null;
+    if ($t8Exists && $rows8->isNotEmpty()) {
+        $ftGrouped = $rows8->groupBy('case_id');
+        $ftTP2 = 0; $ftFP2 = 0; $ftTN2 = 0; $ftFN2 = 0;
+        foreach ($ftGrouped as $caseId => $group) {
+            $top1 = $group->sortBy('rank')->first();
+            if (!$top1) continue;
+            $topCocok = (string) ($top1->cocok ?? '0');
+            $totalInGroup = $group->count();
+            $cocokInGroup = $group->where('cocok', '1')->count();
+
+            if ($topCocok === '1') {
+                $ftTP2++;
+                $ftTN2 += ($totalInGroup - $cocokInGroup);
+            } else {
+                $ftFP2++;
+                $ftFN2 += $cocokInGroup;
+            }
+        }
+
+        $ftTotalEval = $ftTP2 + $ftFP2 + $ftTN2 + $ftFN2;
+        $ftConfusion = [
+            'tp' => $ftTP2,
+            'fp' => $ftFP2,
+            'tn' => $ftTN2,
+            'fn' => $ftFN2,
+            'total' => $ftTotalEval,
+            'accuracy' => $ftTotalEval > 0 ? ($ftTP2 + $ftTN2) / $ftTotalEval : 0,
+            'precision' => ($ftTP2 + $ftFP2) > 0 ? $ftTP2 / ($ftTP2 + $ftFP2) : 0,
+            'recall' => ($ftTP2 + $ftFN2) > 0 ? $ftTP2 / ($ftTP2 + $ftFN2) : 0,
+            'f1' => (2 * $ftTP2 + $ftFP2 + $ftFN2) > 0 ? (2 * $ftTP2) / (2 * $ftTP2 + $ftFP2 + $ftFN2) : 0,
+            'total_cases' => $ftGrouped->count(),
+        ];
+    }
+
+    // === Fuzzy TOPSIS Ranking (latest test case) ===
+    $ftRanking = collect();
+    if ($t8Exists && $rows8->isNotEmpty()) {
+        $latestCaseId = $rows8->max('case_id');
+        $ftRanking = $rows8->where('case_id', $latestCaseId)->sortBy('rank')->values();
+    }
 @endphp
 
-<h1 class="mt-4">Inferensi - {{ $user->username }}</h1>
+<h1 class="mt-4">History - {{ $user->username }}</h1>
 
 @if(session('success'))
   <div class="alert alert-success">{{ session('success') }}</div>
@@ -270,6 +328,7 @@
   <span class="badge text-bg-secondary">inferensi_jc_user: {{ $cJC }}</span>
   <span class="badge text-bg-secondary">inferensi_cs_user: {{ $cCS }}</span>
   <span class="badge text-bg-secondary">inferensi_rf_user: {{ $cRF }}</span>
+  <span class="badge text-bg-warning">inferensi_ft_user: {{ $cFT }}</span>
   @if($search !== '')
     <span class="badge text-bg-light">Filter: "{{ $search }}"</span>
   @endif
@@ -280,8 +339,8 @@
   <a href="{{ route('test.case.form') }}" class="btn btn-sm btn-outline-primary">Lihat Test Case</a>
 </div>
 
-<form method="GET" class="mb-3" role="search">
-  <div class="input-group" style="max-width: 520px;">
+<form method="GET" class="mb-3 d-flex flex-wrap gap-3 align-items-end" role="search">
+  <div class="input-group" style="max-width: 400px;">
     <input
       type="text"
       name="search"
@@ -294,39 +353,187 @@
       <a href="{{ url()->current() }}" class="btn btn-outline-secondary">Reset</a>
     @endif
   </div>
-</form>
-
-<form method="POST" action="{{ route('inference.evaluate') }}" class="mb-3 d-flex flex-wrap gap-2">
-    @csrf
-    <div>
-        <label class="form-label mb-0 small">Algorithm</label>
-        <select name="mode" class="form-select">
-            <option value="hybrid">Hybrid Similarity</option>
-            <option value="jaccard">Jaccard Similarity</option>
-            <option value="cosine">Cosine Similarity</option>
-        </select>
-    </div>
-    <div>
-        <label class="form-label mb-0 small">Evaluation</label>
-        <select name="eval" class="form-select">
-            <option value="loocv">Leave-One-Out (CBR)</option>
-            <option value="kfold">K-Fold</option>
-            <option value="split">Train/Test Split</option>
-        </select>
-    </div>
-    <div>
-        <label class="form-label mb-0 small">Param (k or ratio)</label>
-        <input type="text" name="param" class="form-control" placeholder="5 or 0.8">
-    </div>
-    <div class="align-self-end">
-        <button type="submit" class="btn btn-success">Run Evaluation</button>
-    </div>
+  <div class="d-flex align-items-center gap-2">
+    <label for="per_page" class="form-label mb-0">Show:</label>
+    <select name="per_page" id="per_page" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
+      @foreach($perPageOptions as $opt)
+        <option value="{{ $opt }}" {{ $perPage == $opt ? 'selected' : '' }}>{{ $opt }}</option>
+      @endforeach
+    </select>
+    <span class="text-muted">per page</span>
+  </div>
 </form>
 
 @if (session('eval_output'))
     <div class="alert alert-info" style="white-space: pre-wrap;">{{ session('eval_output') }}</div>
 @endif
 
+{{-- ============================================================ --}}
+{{-- FUZZY TOPSIS RANKING RESULTS                                  --}}
+{{-- ============================================================ --}}
+@if ($ftRanking->isNotEmpty())
+    <div class="card my-3 border-warning">
+        <div class="card-header bg-warning text-dark fw-semibold">
+            Fuzzy TOPSIS - Ranking Kasus (Test Case #{{ $ftRanking->first()->case_id ?? '-' }})
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered table-striped mb-0">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width:60px;">Rank</th>
+                            <th style="width:100px;">Base Case</th>
+                            <th>Goal (Base)</th>
+                            <th style="width:140px;">CC Score</th>
+                            <th style="width:120px;">D+</th>
+                            <th style="width:120px;">D-</th>
+                            <th style="width:80px;">Match</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($ftRanking->take(20) as $ftRow)
+                            @php
+                                $rankNum = (int) ($ftRow->rank ?? 0);
+                                $ruleIdParts = explode('-', $ftRow->rule_id ?? '');
+                                $baseCaseId = end($ruleIdParts);
+                                $ccScore = (float) ($ftRow->score ?? $ftRow->match_value ?? 0);
+                                $rowClass = $rankNum === 1 ? 'table-success fw-bold' : '';
+                            @endphp
+                            <tr class="{{ $rowClass }}">
+                                <td class="text-center">
+                                    @if($rankNum === 1)
+                                        <span class="badge bg-success">{{ $rankNum }}</span>
+                                    @elseif($rankNum <= 3)
+                                        <span class="badge bg-primary">{{ $rankNum }}</span>
+                                    @else
+                                        {{ $rankNum }}
+                                    @endif
+                                </td>
+                                <td>Case #{{ $baseCaseId }}</td>
+                                <td>{{ preg_replace('/^\d+_/', '', str_replace(['_', '-'], ' ', $ftRow->rule_goal ?? '-')) }}</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <div class="progress flex-grow-1" style="height: 16px;">
+                                            <div class="progress-bar bg-{{ $ccScore >= 0.7 ? 'success' : ($ccScore >= 0.4 ? 'warning' : 'danger') }}"
+                                                 style="width: {{ $ccScore * 100 }}%">
+                                            </div>
+                                        </div>
+                                        <small>{{ number_format($ccScore, 4) }}</small>
+                                    </div>
+                                </td>
+                                <td>{{ number_format((float)($ftRow->s_plus ?? 0), 6) }}</td>
+                                <td>{{ number_format((float)($ftRow->s_minus ?? 0), 6) }}</td>
+                                <td class="text-center">
+                                    @if(($ftRow->cocok ?? '0') === '1')
+                                        <span class="badge bg-success">Yes</span>
+                                    @else
+                                        <span class="badge bg-secondary">No</span>
+                                    @endif
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+            @if($ftRanking->count() > 20)
+                <small class="text-muted mt-2 d-block">Menampilkan 20 dari {{ $ftRanking->count() }} kasus.</small>
+            @endif
+        </div>
+    </div>
+@endif
+
+{{-- ============================================================ --}}
+{{-- FUZZY TOPSIS CONFUSION MATRIX & EVALUATION METRICS            --}}
+{{-- ============================================================ --}}
+@if ($ftConfusion)
+    <div class="card my-3 border-warning">
+        <div class="card-header bg-warning text-dark fw-semibold">
+            Fuzzy TOPSIS - Evaluasi (Confusion Matrix)
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-5">
+                    <h6>Confusion Matrix (Top-1 Strategy)</h6>
+                    <p class="text-muted small mb-2">Top-1 ranked case = predicted positive. Goal match = actual positive.</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0 text-center">
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    <th>Predicted: Positive</th>
+                                    <th>Predicted: Negative</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <th>Actual: Positive</th>
+                                    <td class="fw-bold text-success bg-success bg-opacity-10">TP<br>{{ $ftConfusion['tp'] }}</td>
+                                    <td class="fw-bold text-danger bg-danger bg-opacity-10">FN<br>{{ $ftConfusion['fn'] }}</td>
+                                </tr>
+                                <tr>
+                                    <th>Actual: Negative</th>
+                                    <td class="fw-bold text-warning bg-warning bg-opacity-10">FP<br>{{ $ftConfusion['fp'] }}</td>
+                                    <td class="fw-bold text-primary bg-primary bg-opacity-10">TN<br>{{ $ftConfusion['tn'] }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-md-7">
+                    <h6>Evaluation Metrics</h6>
+                    <div class="row g-2">
+                        <div class="col-6 col-lg-3">
+                            <div class="card text-center border-success">
+                                <div class="card-body py-2">
+                                    <small class="text-muted">Accuracy</small>
+                                    <h4 class="mb-0 text-success">{{ number_format($ftConfusion['accuracy'] * 100, 2) }}%</h4>
+                                    <small class="text-muted">(TP+TN)/Total</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="card text-center border-primary">
+                                <div class="card-body py-2">
+                                    <small class="text-muted">Precision</small>
+                                    <h4 class="mb-0 text-primary">{{ number_format($ftConfusion['precision'] * 100, 2) }}%</h4>
+                                    <small class="text-muted">TP/(TP+FP)</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="card text-center border-warning">
+                                <div class="card-body py-2">
+                                    <small class="text-muted">Recall</small>
+                                    <h4 class="mb-0 text-warning">{{ number_format($ftConfusion['recall'] * 100, 2) }}%</h4>
+                                    <small class="text-muted">TP/(TP+FN)</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-lg-3">
+                            <div class="card text-center border-danger">
+                                <div class="card-body py-2">
+                                    <small class="text-muted">F1-Score</small>
+                                    <h4 class="mb-0 text-danger">{{ number_format($ftConfusion['f1'] * 100, 2) }}%</h4>
+                                    <small class="text-muted">2TP/(2TP+FP+FN)</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            Total konsultasi Fuzzy TOPSIS: <strong>{{ $ftConfusion['total_cases'] }}</strong> test case |
+                            Total ranking records: <strong>{{ $cFT }}</strong>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+@endif
+
+{{-- ============================================================ --}}
+{{-- EXISTING CONFUSION MATRICES (Other Algorithms)                --}}
+{{-- ============================================================ --}}
 @if (!empty($matrices))
     <div class="card my-3">
         <div class="card-body">
@@ -407,7 +614,10 @@
     </div>
 @endif
 
-@if (!$t1Exists && !$t2Exists && !$t3Exists && !$t4Exists && !$t5Exists && !$t6Exists && !$t7Exists)
+{{-- ============================================================ --}}
+{{-- MAIN HISTORY TABLE (All Algorithms)                           --}}
+{{-- ============================================================ --}}
+@if (!$t1Exists && !$t2Exists && !$t3Exists && !$t4Exists && !$t5Exists && !$t6Exists && !$t7Exists && !$t8Exists)
   <ol class="breadcrumb mb-4"><li class="breadcrumb-item active">Belum ada tabel inferensi untuk user ini.</li></ol>
 @elseif ($all->isEmpty())
   <ol class="breadcrumb mb-4"><li class="breadcrumb-item active">Belum ada data inferensi.</li></ol>
@@ -423,7 +633,8 @@
             <th>Goal / Rule Goal</th>
             <th style="width:140px;">Match Value</th>
             <th style="min-width:180px;">Algorithm</th>
-            <th style="width:180px;">Execution Time (s)</th>
+            <th style="width:170px;">Tanggal Eksekusi</th>
+            <th style="width:150px;">Execution Time (s)</th>
             <th style="width:110px;">Action</th>
           </tr>
         </thead>
@@ -439,6 +650,10 @@
                 $algo = $renderAlgo($row);
                 $sec = isset($row->waktu) ? (float) $row->waktu : (isset($row->exec_time) ? (float) $row->exec_time : 0.0);
                 $secFmt = number_format($sec, 6);
+                $isLegacyNoExecDate = ($algo === 'Matching Rule' && abs($sec) < 1e-12);
+                $execDate = (!$isLegacyNoExecDate && $row->_created)
+                    ? date('d M Y H:i:s', strtotime($row->_created))
+                    : '-';
                 $cidForLink = $row->case_id ?? '';
             @endphp
             <tr>
@@ -447,7 +662,14 @@
               <td>{{ $ruleId }}</td>
               <td>{{ $goalText }}</td>
               <td>{{ $mvFmt }}</td>
-              <td>{{ $algo }}</td>
+              <td>
+                @if($algo === 'Fuzzy TOPSIS')
+                    <span class="badge bg-warning text-dark">{{ $algo }}</span>
+                @else
+                    {{ $algo }}
+                @endif
+              </td>
+              <td>{{ $execDate }}</td>
               <td>{{ $secFmt }}</td>
               <td>
                 <a href="{{ url('/detail?case_id=' . urlencode((string) $cidForLink)) }}" class="btn btn-primary btn-sm">Detail</a>

@@ -219,6 +219,6 @@
     </div>
 @endif
 
-<a href="{{ url('/inference') }}" class="btn btn-secondary">Back</a>
+<a href="{{ url('/history') }}" class="btn btn-secondary">Back</a>
 
 @endsection

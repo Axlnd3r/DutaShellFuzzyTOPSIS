@@ -36,7 +36,9 @@ $DEFAULT_MAX_SAMPLES = (int)envv('SVM_MAX_SAMPLES', '0'); // 0 = unlimited secar
 if ($MEMORY_LIMIT) {
   @ini_set('memory_limit', (string)$MEMORY_LIMIT);
 }
-$MODEL_DIR_FALLBACK  = getcwd() . DIRECTORY_SEPARATOR . 'svm_models';
+// Gunakan path relatif dari lokasi script untuk konsistensi
+$PROJECT_ROOT = realpath(__DIR__ . '/../../');
+$MODEL_DIR_FALLBACK  = $PROJECT_ROOT . DIRECTORY_SEPARATOR . 'svm_models';
 // Default proporsi data uji dan threshold keputusan (bisa dioverride via ENV / CLI)
 $DEFAULT_TEST_RATIO  = (float)envv('SVM_TEST_RATIO','0.3');   // 30% untuk uji (70/30)
 $DECISION_THRESHOLD  = (float)envv('SVM_THRESHOLD','0.0');    // dot >= threshold => kelas +1
@@ -254,21 +256,51 @@ if ($tableOverride !== null && !preg_match('/^[A-Za-z0-9_]+$/', $tableOverride))
 }
 
 ///////////////////////////// DB CONNECT ///////////////////////
-mysqli_report(MYSQLI_REPORT_ERROR|MYSQLI_REPORT_STRICT);
 $host=(string)envv('DB_HOST','127.0.0.1');
-$port=(int)envv('DB_PORT',3307);
-$database=(string)envv('DB_DATABASE','expertt');
+$port=(int)envv('DB_PORT',3306);
+$database=(string)envv('DB_DATABASE','expertt2');
 $username=(string)envv('DB_USERNAME','root');
 $password=(string)envv('DB_PASSWORD','');
-try{
-  $db=new mysqli($host,$username,$password,$database,$port);
-  $db->set_charset('utf8mb4');
-}catch(Throwable $e){
-  if(defined('STDERR')) fwrite(STDERR,"❌ DB connect failed ({$e->getCode()}): {$e->getMessage()}\n");
-  else echo "❌ DB connect failed ({$e->getCode()}): {$e->getMessage()}\n";
-  exit(1);
+if(strtolower($host)==='localhost'){
+  $host='127.0.0.1';
 }
 
+mysqli_report(MYSQLI_REPORT_ERROR|MYSQLI_REPORT_STRICT);
+$db=null;
+$lastErr=null;
+$retryMax=3;
+$hostsTried=array_values(array_unique(array_filter([$host,'127.0.0.1'])));
+$portsTried=array_values(array_unique(array_filter([(int)$port,3306,3307], fn($p)=>$p>0)));
+foreach($hostsTried as $h){
+  foreach($portsTried as $p){
+    for($attempt=1;$attempt<=$retryMax;$attempt++){
+      try{
+        set_error_handler(static function(){ return true; });
+        $db=new mysqli((string)$h,$username,$password,$database,(int)$p);
+        restore_error_handler();
+        $db->set_charset('utf8mb4');
+        $host=(string)$h;
+        $port=(int)$p;
+        $lastErr=null;
+        break 3;
+      }catch(Throwable $e){
+        restore_error_handler();
+        $lastErr=$e;
+        if($attempt<$retryMax){
+          usleep(250000); // 250ms retry for transient MySQL startup/race
+        }
+      }
+    }
+  }
+}
+if(!$db instanceof mysqli){
+  $code=$lastErr?->getCode() ?? 0;
+  $msg=$lastErr?->getMessage() ?? 'Unknown error';
+  $detail="hosts=".implode(',', $hostsTried)."; ports=".implode(',', $portsTried)."; db={$database}; user={$username}";
+  if(defined('STDERR')) fwrite(STDERR,"DB connect failed ({$code}): {$msg} | {$detail}\n");
+  else echo "DB connect failed ({$code}): {$msg} | {$detail}\n";
+  exit(1);
+}
 // validasi nama tabel override (setelah ada $db)
 if ($tableOverride !== null && !preg_match('/^[A-Za-z0-9_]+$/', $tableOverride)) {
   log_and_exit_fail($db, $userId, "Nama tabel override tidak valid.");

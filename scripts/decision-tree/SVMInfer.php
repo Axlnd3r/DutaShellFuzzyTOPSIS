@@ -10,8 +10,8 @@ function envv(string $k, $d=null){
 }
 
 $host=(string)envv('DB_HOST','127.0.0.1');
-$port=(int)envv('DB_PORT',3307);
-$database=(string)envv('DB_DATABASE','expertt');
+$port=(int)envv('DB_PORT',3306);
+$database=(string)envv('DB_DATABASE','expertt2');
 $username=(string)envv('DB_USERNAME','root');
 $password=(string)envv('DB_PASSWORD','');
 
@@ -31,9 +31,9 @@ $caseNum=(int)$argv[2];
 $overrideTable=null;
 $preferredKernel=null;
 for($i=3;$i<$argc;$i++){
-  if (str_starts_with($argv[$i],'--table=')) {
+  if (strpos($argv[$i],'--table=') === 0) {
     $overrideTable=substr($argv[$i],8);
-  } elseif (str_starts_with($argv[$i],'--kernel=')) {
+  } elseif (strpos($argv[$i],'--kernel=') === 0) {
     $preferredKernel=strtolower(trim(substr($argv[$i],9)));
     if ($preferredKernel==='') $preferredKernel=null;
   }
@@ -43,17 +43,27 @@ mysqli_report(MYSQLI_REPORT_ERROR|MYSQLI_REPORT_STRICT);
 $db=new mysqli($host,$username,$password,$database,$port);
 $db->set_charset('utf8mb4');
 
-$storageDir = function_exists('storage_path') ? storage_path('app/svm') : (getcwd().DIRECTORY_SEPARATOR.'svm_models');
+// Gunakan path relatif dari lokasi script untuk konsistensi
+$projectRoot = realpath(__DIR__ . '/../../');
+$storageDir = $projectRoot . DIRECTORY_SEPARATOR . 'svm_models';
+// Juga cek di storage/app/svm sebagai alternatif
+$storageDirAlt = $projectRoot . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'app' . DIRECTORY_SEPARATOR . 'svm';
 // Jika diberikan --kernel=nama, prioritaskan file JSON dengan suffix kernel tersebut
 // (mis. svm_user_{id}_rbf.json). Bila tidak ditemukan, fallback ke daftar default.
 $candidateKernels=['sgd','rbf','sigmoid'];
 $candidates=[];
+// Cek di kedua lokasi: svm_models dan storage/app/svm
+$searchDirs = [$storageDir, $storageDirAlt];
 if($preferredKernel){
-  $candidates[]=$storageDir."/svm_user_{$userId}_{$preferredKernel}.json";
+  foreach($searchDirs as $dir){
+    $candidates[]=$dir.DIRECTORY_SEPARATOR."svm_user_{$userId}_{$preferredKernel}.json";
+  }
 }
 foreach($candidateKernels as $k){
   if($preferredKernel===$k) continue;
-  $candidates[]=$storageDir."/svm_user_{$userId}_{$k}.json";
+  foreach($searchDirs as $dir){
+    $candidates[]=$dir.DIRECTORY_SEPARATOR."svm_user_{$userId}_{$k}.json";
+  }
 }
 $modelPath=null; $model=null; $chosenKernel=null;
 foreach($candidates as $m){
@@ -107,12 +117,25 @@ if(!table_exists($db,$database,$infTbl)){
       `cocok` enum('1','0') NOT NULL,
       `user_id` int(11) NOT NULL,
       `waktu` decimal(16,14) NOT NULL DEFAULT 0,
+      `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (`inf_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
   ");
 } else {
-  // bersihkan baris SVM lama biar tidak dobel
-  $db->query("DELETE FROM `{$infTbl}` WHERE rule_id='SVM'");
+  // Tambah kolom created_at jika belum ada
+  $colCheck = $db->query("SHOW COLUMNS FROM `{$infTbl}` LIKE 'created_at'");
+  if ($colCheck && $colCheck->num_rows == 0) {
+    $db->query("ALTER TABLE `{$infTbl}` ADD COLUMN `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP");
+  }
+}
+
+// Ambil case_id SVM yang sudah pernah diproses untuk menghindari duplikasi
+$processedCaseIds = [];
+$existingRes = $db->query("SELECT case_id FROM `{$infTbl}` WHERE rule_id='SVM'");
+if ($existingRes) {
+    while ($row = $existingRes->fetch_assoc()) {
+        $processedCaseIds[$row['case_id']] = true;
+    }
 }
 
 function applyKernel(array $xBase, string $type, array $meta, array $baseIndex): array {
@@ -179,7 +202,7 @@ function encodeRow(array $row, array $baseIndex, array $numMinmax, int $B): arra
   }
   // categorical one-hot
   foreach ($baseIndex as $key=>$idx){
-    if (!str_starts_with($key,'CAT::')) continue;
+    if (strpos($key,'CAT::') !== 0) continue;
     [, $col, $val] = explode('::',$key,3);
     $got = isset($row[$col]) ? (string)$row[$col] : '';
     if ($got!=='' && $got===$val) $x[$idx]=1.0;
@@ -190,11 +213,16 @@ function encodeRow(array $row, array $baseIndex, array $numMinmax, int $B): arra
 $before = table_exists($db,$database,$infTbl) ? (int)($db->query("SELECT COUNT(*) c FROM `{$infTbl}`")->fetch_assoc()['c']) : 0;
 
 $start=microtime(true);
-$ins=$db->prepare("INSERT INTO `{$infTbl}`(case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu) VALUES (?,?,?,?,?,?,?,?)");
+$ins=$db->prepare("INSERT INTO `{$infTbl}`(case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu, created_at) VALUES (?,?,?,?,?,?,?,?,NOW())");
 $cnt=0;
 
 while($r=$cases->fetch_assoc()){
   $caseId=(string)($r['case_id'] ?? (++$cnt));
+
+  // Skip jika case_id sudah pernah diproses
+  if (isset($processedCaseIds[$caseId])) {
+      continue;
+  }
   $xBase=encodeRow($r,$baseIndex,$numMinmax,$B);
   $z=applyKernel($xBase,$kernelType,$kernelMeta,$baseIndex);
   $z[] = 1.0;

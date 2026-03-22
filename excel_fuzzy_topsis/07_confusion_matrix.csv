@@ -1,0 +1,26 @@
+STEP 9: CONFUSION MATRIX & EVALUASI,,,,,,
+,,,,,,
+Strategy: Top-1 (hanya rank 1 = Predicted Positive),,,,,,
+,,,,,,
+=== KLASIFIKASI PER CASE ===,,,,,,
+Case,Rank,Predicted,Goal Case,Goal Test,Same Goal?,Label
+K1,1,Positive,Flu,Flu,Ya,TP (True Positive)
+K3,2,Negative,Flu,Flu,Ya,FN (False Negative)
+K2,3,Negative,Cacingan,Flu,Tidak,TN (True Negative)
+,,,,,,
+=== CONFUSION MATRIX ===,,,,,,
+,Predicted Positive,Predicted Negative,,,,
+Actual Positive,TP = 1,FN = 1,,,,
+Actual Negative,FP = 0,TN = 1,,,,
+,,,,,,
+=== METRIK EVALUASI ===,,,,,,
+Metrik,Rumus,Perhitungan,Hasil,,,
+Accuracy,(TP+TN)/(TP+TN+FP+FN),(1+1)/(1+1+0+1),66.67%,,,
+Precision,TP/(TP+FP),1/(1+0),100.00%,,,
+Recall,TP/(TP+FN),1/(1+1),50.00%,,,
+F1-Score,2x(PxR)/(P+R),2x(1.0x0.5)/(1.0+0.5),66.67%,,,
+,,,,,,
+=== INTERPRETASI ===,,,,,,
+"Precision 100% = Ketika sistem memprediksi positif (rank 1), selalu benar",,,,,,
+"Recall 50% = Dari semua kasus yang seharusnya positif, hanya setengah yang terdeteksi di rank 1",,,,,,
+"Ini wajar karena K3 juga Flu tapi tidak bisa di rank 1 bersamaan dengan K1",,,,,,

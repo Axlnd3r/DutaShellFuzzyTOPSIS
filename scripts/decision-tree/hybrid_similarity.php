@@ -1,13 +1,26 @@
 <?php
 // Hybrid Similarity (Cosine+Jaccard) with entropy-based attribute weights and configurable alpha
 
-// DB connection (ikuti konvensi skrip lain)
-$servername = "localhost";
-$username   = "root";
-$password   = "";
-$dbname     = "expertt";
+// Load database config from Laravel .env
+$envPath = __DIR__ . '/../../.env';
+$dbConfig = [
+    'host' => '127.0.0.1',
+    'port' => 3306,
+    'database' => 'expertt',
+    'username' => 'root',
+    'password' => ''
+];
 
-$conn = new mysqli($servername, $username, $password, $dbname);
+if (file_exists($envPath)) {
+    $envContent = file_get_contents($envPath);
+    if (preg_match('/^DB_HOST=(.*)$/m', $envContent, $m)) $dbConfig['host'] = trim($m[1]);
+    if (preg_match('/^DB_PORT=(\d+)/m', $envContent, $m)) $dbConfig['port'] = (int)trim($m[1]);
+    if (preg_match('/^DB_DATABASE=(.*)$/m', $envContent, $m)) $dbConfig['database'] = trim($m[1]);
+    if (preg_match('/^DB_USERNAME=(.*)$/m', $envContent, $m)) $dbConfig['username'] = trim($m[1]);
+    if (preg_match('/^DB_PASSWORD=(.*)$/m', $envContent, $m)) $dbConfig['password'] = trim($m[1]);
+}
+
+$conn = new mysqli($dbConfig['host'], $dbConfig['username'], $dbConfig['password'], $dbConfig['database'], $dbConfig['port']);
 if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
@@ -43,11 +56,9 @@ if ($mode === 'jaccard') {
     $algoFilter = 'Hybrid Similarity';
 }
 
-// ensure output table
+// ensure output table exists (tanpa TRUNCATE agar data lama tidak hilang)
 $result = $conn->query("SHOW TABLES LIKE '$table_inf'");
-if ($result && $result->num_rows > 0) {
-    $conn->query("TRUNCATE TABLE $table_inf");
-} else {
+if (!$result || $result->num_rows == 0) {
     $sql = "CREATE TABLE $table_inf (
         `inf_id` INT(11) PRIMARY KEY NOT NULL AUTO_INCREMENT,
         `case_id` VARCHAR(100) NOT NULL,
@@ -57,45 +68,119 @@ if ($result && $result->num_rows > 0) {
         `match_value` DECIMAL(6,5) NOT NULL,
         `cocok` ENUM('1','0') NOT NULL,
         `user_id` INT(11) NOT NULL,
-        `waktu` DECIMAL(16,14) NOT NULL DEFAULT 0
+        `waktu` DECIMAL(16,14) NOT NULL DEFAULT 0,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
     )";
     if (!$conn->query($sql)) {
         die("Error creating table: " . $conn->error);
     }
+} else {
+    // Tambah kolom created_at jika belum ada (untuk tabel lama)
+    $colCheck = $conn->query("SHOW COLUMNS FROM $table_inf LIKE 'created_at'");
+    if ($colCheck && $colCheck->num_rows == 0) {
+        $conn->query("ALTER TABLE $table_inf ADD COLUMN `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP");
+    }
 }
 
-// goal column
-$goalCol = null;
-$goalQuery = $conn->query("SELECT atribut_id, atribut_name FROM atribut WHERE user_id = $user_id AND goal = 'T' LIMIT 1");
-if ($goalQuery && $goalQuery->num_rows > 0) {
-    $g = $goalQuery->fetch_assoc();
-    $goalCol = $g['atribut_id'] . '_' . $g['atribut_name'];
-}
-if ($goalCol === null) {
-    $res = $conn->query("SELECT * FROM $table_base LIMIT 1");
-    if ($res) {
-        $fieldcount = $res->field_count;
-        $fields = $res->fetch_fields();
-        if ($fieldcount >= 4) {
-            $goalCol = $fields[$fieldcount - 3]->name; // heuristik seperti matching_rule.php
+// Ambil case_id yang sudah pernah diproses untuk menghindari duplikasi
+// Tapi izinkan reprocess jika goal kosong (fix data lama)
+$processedCaseIds = [];
+$existingRes = $conn->query("SELECT case_id, case_goal, rule_goal FROM $table_inf");
+if ($existingRes) {
+    while ($row = $existingRes->fetch_assoc()) {
+        $cg = $row['case_goal'] ?? '';
+        $rg = $row['rule_goal'] ?? '';
+        // Cek apakah goal kosong (format: "xxx=" tanpa nilai setelah =)
+        $cgEmpty = ($cg === '' || preg_match('/=\s*$/', $cg));
+        $rgEmpty = ($rg === '' || preg_match('/=\s*$/', $rg));
+        if ($cgEmpty || $rgEmpty) {
+            // Hapus record lama dengan goal kosong agar bisa diproses ulang
+            $conn->query("DELETE FROM $table_inf WHERE case_id = " . (int)$row['case_id']);
+        } else {
+            $processedCaseIds[$row['case_id']] = true;
         }
     }
 }
+
+// Ambil semua kolom dari tabel base case untuk verifikasi
+$baseColNames = [];
+$baseColRes = $conn->query("SELECT * FROM $table_base LIMIT 1");
+if ($baseColRes) {
+    $fields = $baseColRes->fetch_fields();
+    foreach ($fields as $f) {
+        $baseColNames[] = $f->name;
+    }
+}
+
+// goal column - cari dari atribut table, lalu verifikasi terhadap kolom tabel yang sebenarnya
+$goalCol = null;
+$goalAttrName = null;
+$goalQuery = $conn->query("SELECT atribut_id, atribut_name FROM atribut WHERE user_id = $user_id AND goal = 'T' LIMIT 1");
+if ($goalQuery && $goalQuery->num_rows > 0) {
+    $g = $goalQuery->fetch_assoc();
+    $candidateGoalCol = $g['atribut_id'] . '_' . $g['atribut_name'];
+    $goalAttrName = $g['atribut_name'];
+
+    // Verifikasi: apakah kolom ini benar-benar ada di tabel base case?
+    if (in_array($candidateGoalCol, $baseColNames)) {
+        $goalCol = $candidateGoalCol;
+    } else {
+        // Kolom tidak ditemukan (mungkin atribut_id berubah), cari berdasarkan nama atribut
+        foreach ($baseColNames as $colName) {
+            if (in_array($colName, ['case_id', 'user_id', 'case_num'])) continue;
+            // Cocokkan berdasarkan bagian nama setelah prefix id (misal "14_play" → "play")
+            $parts = explode('_', $colName, 2);
+            if (count($parts) === 2 && strtolower($parts[1]) === strtolower($g['atribut_name'])) {
+                $goalCol = $colName;
+                break;
+            }
+        }
+    }
+}
+
+// Fallback: jika masih belum ketemu, cari kolom goal berdasarkan tabel atribut (match by name)
+if ($goalCol === null && $goalAttrName === null) {
+    // Ambil semua atribut goal
+    $goalQuery2 = $conn->query("SELECT atribut_id, atribut_name FROM atribut WHERE user_id = $user_id AND goal = 'T'");
+    if ($goalQuery2) {
+        while ($g2 = $goalQuery2->fetch_assoc()) {
+            foreach ($baseColNames as $colName) {
+                if (in_array($colName, ['case_id', 'user_id', 'case_num'])) continue;
+                $parts = explode('_', $colName, 2);
+                if (count($parts) === 2 && strtolower($parts[1]) === strtolower($g2['atribut_name'])) {
+                    $goalCol = $colName;
+                    $goalAttrName = $g2['atribut_name'];
+                    break 2;
+                }
+            }
+        }
+    }
+}
+
+// Fallback terakhir: heuristik posisi (kolom pertama setelah case_id, karena ORDER BY goal DESC saat CREATE)
+if ($goalCol === null) {
+    $skipCols = ['case_id', 'user_id', 'case_num', 'algoritma'];
+    foreach ($baseColNames as $colName) {
+        if (!in_array($colName, $skipCols)) {
+            $goalCol = $colName;
+            break; // Kolom pertama setelah case_id = goal (karena ORDER BY goal DESC)
+        }
+    }
+}
+
 if ($goalCol === null) {
     die("Cannot determine goal column");
 }
 
+echo "Goal column detected: $goalCol\n";
+
 // attribute columns (non-goal, non-id)
-$baseRes = $conn->query("SELECT * FROM $table_base LIMIT 1");
 $attrCols = [];
-if ($baseRes) {
-    $fields = $baseRes->fetch_fields();
-    foreach ($fields as $f) {
-        $name = $f->name;
-        if (in_array($name, ['case_id', 'user_id', 'case_num'])) continue;
-        if ($name === $goalCol) continue;
-        $attrCols[] = $name;
-    }
+$skipCols = ['case_id', 'user_id', 'case_num', 'algoritma'];
+foreach ($baseColNames as $colName) {
+    if (in_array($colName, $skipCols)) continue;
+    if ($colName === $goalCol) continue;
+    $attrCols[] = $colName;
 }
 if (count($attrCols) === 0) {
     die("No attribute columns found");
@@ -205,11 +290,24 @@ if ($allBaseRes) {
         $baseCases[] = $row;
     }
 }
+echo "Base cases loaded: " . count($baseCases) . "\n";
+if (count($baseCases) > 0) {
+    $firstBase = $baseCases[0];
+    $goalValSample = $firstBase[$goalCol] ?? '(NULL/MISSING)';
+    echo "Goal column '$goalCol' sample value: $goalValSample\n";
+    echo "Base case columns: " . implode(', ', array_keys($firstBase)) . "\n";
+}
 
 // iterate test cases
 while ($test = $testRes->fetch_assoc()) {
     $case_id = $test['case_id'];
-    $case_goal = $goalCol . '=' . (isset($test[$goalCol]) ? $test[$goalCol] : '');
+
+    // Skip jika case_id sudah pernah diproses
+    if (isset($processedCaseIds[$case_id])) {
+        continue;
+    }
+
+    $testGoalRaw = isset($test[$goalCol]) ? $test[$goalCol] : '';
     $normalizedTest = normalize_case_row($test, $attrCols);
 
     $bestScore = -1.0;
@@ -228,15 +326,24 @@ while ($test = $testRes->fetch_assoc()) {
 
     if ($bestBase !== null) {
         $rule_id = $bestBase['case_id'];
-        $rule_goal = $goalCol . '=' . $bestBase[$goalCol];
-        $testGoalNorm = normalize_value($test[$goalCol] ?? '');
-        $ruleGoalNorm = normalize_value($bestBase[$goalCol] ?? '');
-        $cocok = ($testGoalNorm === $ruleGoalNorm) ? '1' : '0';
+        $bestGoalVal = $bestBase[$goalCol] ?? '';
+        $rule_goal = $goalCol . '=' . $bestGoalVal;
+
+        // Jika test case tidak punya nilai goal (consultation), gunakan goal dari best match
+        if ($testGoalRaw === '' || $testGoalRaw === null) {
+            $case_goal = $rule_goal;
+            $cocok = '1'; // consultation: goal = predicted goal
+        } else {
+            $case_goal = $goalCol . '=' . $testGoalRaw;
+            $testGoalNorm = normalize_value($testGoalRaw);
+            $ruleGoalNorm = normalize_value($bestGoalVal);
+            $cocok = ($testGoalNorm === $ruleGoalNorm) ? '1' : '0';
+        }
         $akhir = microtime(true);
         $lama = $akhir - $awal;
 
         $sql = sprintf(
-            "INSERT INTO %s (case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu) VALUES (%d, '%s', %d, '%s', %.5f, '%s', %d, %.14f)",
+            "INSERT INTO %s (case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu, created_at) VALUES (%d, '%s', %d, '%s', %.5f, '%s', %d, %.14f, NOW())",
             $table_inf,
             (int)$case_id,
             $conn->real_escape_string($case_goal),

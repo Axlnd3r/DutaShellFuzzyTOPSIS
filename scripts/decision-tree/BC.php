@@ -1,18 +1,26 @@
 <?php
 // fungsi ini untuk melakukan inferensi melalui pencocokan rule
 
-// membuka database
-// menghubungkan ke database
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "expertt";
+// Load database config from Laravel .env
+$envPath = __DIR__ . '/../../.env';
+$dbConfig = [
+    'host' => '127.0.0.1',
+    'port' => 3306,
+    'database' => 'expertt',
+    'username' => 'root',
+    'password' => ''
+];
 
-// Create connection
-$dbport = getenv('DB_PORT');
-$port = ($dbport !== false && $dbport !== '') ? (int) $dbport : 3306;
-$conn = new mysqli($servername, $username, $password, $dbname, $port);
-// Check connection
+if (file_exists($envPath)) {
+    $envContent = file_get_contents($envPath);
+    if (preg_match('/^DB_HOST=(.*)$/m', $envContent, $m)) $dbConfig['host'] = trim($m[1]);
+    if (preg_match('/^DB_PORT=(\d+)/m', $envContent, $m)) $dbConfig['port'] = (int)trim($m[1]);
+    if (preg_match('/^DB_DATABASE=(.*)$/m', $envContent, $m)) $dbConfig['database'] = trim($m[1]);
+    if (preg_match('/^DB_USERNAME=(.*)$/m', $envContent, $m)) $dbConfig['username'] = trim($m[1]);
+    if (preg_match('/^DB_PASSWORD=(.*)$/m', $envContent, $m)) $dbConfig['password'] = trim($m[1]);
+}
+
+$conn = new mysqli($dbConfig['host'], $dbConfig['username'], $dbConfig['password'], $dbConfig['database'], $dbConfig['port']);
 if ($conn->connect_error) {
   die("Connection failed: " . $conn->connect_error);
 }
@@ -28,8 +36,11 @@ $result = $conn->query("SHOW TABLES LIKE '$tabelinferensi'");
 
 // periksa apakah tabel sudah ada
 if ($result->num_rows > 0) {
-    // jika sudah ada hapus isi data tabel
-    $trunrule = $conn->query("truncate table $tabelinferensi");
+    // Tambah kolom created_at jika belum ada
+    $colCheck = $conn->query("SHOW COLUMNS FROM $tabelinferensi LIKE 'created_at'");
+    if ($colCheck && $colCheck->num_rows == 0) {
+        $conn->query("ALTER TABLE $tabelinferensi ADD COLUMN `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP");
+    }
 } else {
     //membentuk tabel untuk proses
     $sql = "CREATE table $tabelinferensi (
@@ -41,13 +52,23 @@ if ($result->num_rows > 0) {
             `match_value` decimal(5,4) NOT NULL,
             `cocok` enum('1','0') NOT NULL,
             `user_id` int(11) NOT NULL,
-            `waktu` DECIMAL(16,14) NOT NULL DEFAULT 0
+            `waktu` DECIMAL(16,14) NOT NULL DEFAULT 0,
+            `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP
             )";
 
     if ($conn->query($sql) === TRUE) {
         echo "create table successfully";
     } else {
         echo "Error creating tabel: " . $conn->error;
+    }
+}
+
+// Ambil case_id yang sudah pernah diproses untuk menghindari duplikasi
+$processedCaseIds = [];
+$existingRes = $conn->query("SELECT case_id FROM $tabelinferensi");
+if ($existingRes) {
+    while ($row = $existingRes->fetch_assoc()) {
+        $processedCaseIds[$row['case_id']] = true;
     }
 }
 
@@ -109,6 +130,12 @@ while ($row= $casefactquery->fetch_assoc()) {
     // mengambil atribut kasus
     $faktacase="";
     $case_id=$row["case_id"];
+
+    // Skip jika case_id sudah pernah diproses
+    if (isset($processedCaseIds[$case_id])) {
+        continue;
+    }
+
     // mengambil atribut goal
     $goalstt=$namaatributgoal."=".$row["$namaatributgoal"];
     //echo $case_id." pernyataan goal: ".$goalstt."<br>";
@@ -170,8 +197,8 @@ while ($row= $casefactquery->fetch_assoc()) {
             $lama = $akhir - $awal;
 
             // simpan data inferensi
-            $sql = "INSERT INTO $tabelinferensi (inf_id, case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu)
-           VALUES ($case_id, $case_id, '$goalstt', $rule_id, '$then_part', $matchvalue, '$cocok', $user_id, $lama)";
+            $sql = "INSERT INTO $tabelinferensi (inf_id, case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu, created_at)
+           VALUES ($case_id, $case_id, '$goalstt', $rule_id, '$then_part', $matchvalue, '$cocok', $user_id, $lama, NOW())";
            
             if (mysqli_query($conn, $sql)) {
                 //echo "New record created successfully".$case_id."....".$rule_id."<br>";
@@ -205,8 +232,8 @@ while ($row= $casefactquery->fetch_assoc()) {
         $akhir = microtime(true);
         $lama = $akhir - $awal;
         // simpan data inferensi
-        $sql = "INSERT INTO $tabelinferensi (inf_id, case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu)
-        VALUES ($case_id, $case_id, '$goalstt', $rule_id_ok, '$then_part_ok', $matchvalue, $cocok_ok, $user_id, $lama)";
+        $sql = "INSERT INTO $tabelinferensi (inf_id, case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu, created_at)
+        VALUES ($case_id, $case_id, '$goalstt', $rule_id_ok, '$then_part_ok', $matchvalue, $cocok_ok, $user_id, $lama, NOW())";
         
         if (mysqli_query($conn, $sql)) {
             //echo "New record created successfully".$case_id."....".$rule_id_ok."<br>";
@@ -214,12 +241,12 @@ while ($row= $casefactquery->fetch_assoc()) {
             echo "Error: " . $sql . "<br>" . mysqli_error($conn);
         }
     } elseif($simpan==0 and $prob==0)
-    { 
+    {
         $akhir = microtime(true);
         $lama = $akhir - $awal;
         // simpan data inferensi
-        $sql = "INSERT INTO $tabelinferensi (inf_id, case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu)
-        VALUES ($case_id, $case_id, '$goalstt', '', '', 0, 0, $user_id, $lama)";
+        $sql = "INSERT INTO $tabelinferensi (inf_id, case_id, case_goal, rule_id, rule_goal, match_value, cocok, user_id, waktu, created_at)
+        VALUES ($case_id, $case_id, '$goalstt', '', '', 0, 0, $user_id, $lama, NOW())";
         
         if (mysqli_query($conn, $sql)) {
             //echo "New record created successfully".$case_id."....".$rule_id."<br>";

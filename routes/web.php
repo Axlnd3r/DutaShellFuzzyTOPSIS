@@ -10,6 +10,7 @@ use App\Http\Controllers\ConsultationController;
 use App\Http\Controllers\CSController;
 use App\Http\Controllers\DecisionTreeController;
 use App\Http\Controllers\FCController;
+use App\Http\Controllers\FuzzyTopsisController;
 use App\Http\Controllers\HSController;
 use App\Http\Controllers\InferenceController;
 use App\Http\Controllers\JCController;
@@ -18,6 +19,8 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\RandomForestController;
 use App\Http\Controllers\RuleController;
 use App\Http\Controllers\SVMController;
+use App\Http\Controllers\EvaluationController;
+use App\Http\Controllers\HybridSimController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
@@ -85,13 +88,18 @@ Route::get('/consultation/{case_id}/edit', [ConsultationController::class, 'edit
 Route::put('/consultation/{case_id}', [ConsultationController::class, 'update'])->name('test.case.update')->middleware('auth');
 Route::delete('/consultation/{case_id}', [ConsultationController::class, 'destroy'])->name('test.case.destroy')->middleware('auth');
 
-// inference
-Route::get('/inference', function () {
+// inference AKA History
+Route::get('/history', function () {
     return view('admin.menu.inferensi');
 })->middleware('auth');
-Route::get('/inference/{user_id}/{case_num}', [InferenceController::class, 'generateInference'])->middleware('auth');
-Route::post('/inference/{user_id}/{case_num}', [InferenceController::class, 'generate'])->name('inference.generate')->middleware('auth');
-Route::post('/inference/evaluate', [InferenceController::class, 'evaluate'])->name('inference.evaluate')->middleware('auth');
+Route::get('/history/{user_id}/{case_num}', [InferenceController::class, 'generateInference'])->middleware('auth');
+Route::post('/history/{user_id}/{case_num}', [InferenceController::class, 'generate'])->name('inference.generate')->middleware('auth');
+Route::post('/history/evaluate', [InferenceController::class, 'evaluate'])->name('inference.evaluate')->middleware('auth');
+
+// fuzzy topsis
+Route::post('/fuzzy-topsis/infer', [FuzzyTopsisController::class, 'infer'])
+    ->name('fuzzy.topsis.infer')
+    ->middleware('auth');
 
 // fc
 Route::get('/forwardChaining', function () {
@@ -127,6 +135,14 @@ Route::get('/cosineSimilarity', function () {
 })->middleware('auth');
 Route::get('/cosineSimilarity/{user_id}/{case_num}', [CSController::class, 'generateCS'])->middleware('auth');
 Route::post('/cosineSimilarity/{user_id}/{case_num}', [CSController::class, 'generateCS'])->name('inference.cs')->middleware('auth');
+
+//Hybrid Similarity DKK
+Route::get('/HybridSim', [HybridSimController::class, 'show'])->name('HybridSim.show')->middleware('auth');
+Route::post('/HybridSim/generate', [HybridSimController::class, 'generate'])->name('HybridSim.generate')->middleware('auth');
+
+// Evaluasi Perbandingan (Fuzzy TOPSIS vs Hybrid Similarity)
+Route::get('/evaluation', [EvaluationController::class, 'show'])->name('evaluation.show')->middleware('auth');
+Route::post('/evaluation/run', [EvaluationController::class, 'run'])->name('evaluation.run')->middleware('auth');
 
 // detail
 Route::get('/detail', function () {

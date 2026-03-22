@@ -6,10 +6,48 @@
 //  - testcase: uses test_case_user_{user} as test, case_user_{user} as train
 //  - loocv: ignores param
 
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "expertt";
+// Load database config from Laravel .env
+function env_value(array $lines, string $key, $default = null) {
+    if (!array_key_exists($key, $lines)) return $default;
+    $value = trim((string) $lines[$key]);
+    if ($value === '' || strtolower($value) === 'null') return '';
+    if (
+        (str_starts_with($value, '"') && str_ends_with($value, '"')) ||
+        (str_starts_with($value, "'") && str_ends_with($value, "'"))
+    ) {
+        $value = substr($value, 1, -1);
+    }
+    return $value;
+}
+
+$envPath = __DIR__ . '/../../.env';
+$envData = [];
+if (file_exists($envPath)) {
+    $raw = file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    foreach ($raw as $line) {
+        $line = trim($line);
+        if ($line === '' || str_starts_with($line, '#')) continue;
+        $parts = explode('=', $line, 2);
+        if (count($parts) !== 2) continue;
+        $envData[trim($parts[0])] = $parts[1];
+    }
+}
+
+$dbConfig = [
+    'host' => env_value($envData, 'DB_HOST', 'localhost'),
+    'port' => (int) (env_value($envData, 'DB_PORT', '3306') ?: 3306),
+    'database' => env_value($envData, 'DB_DATABASE', 'expertt'),
+    'username' => env_value($envData, 'DB_USERNAME', 'root'),
+    'password' => env_value($envData, 'DB_PASSWORD', ''),
+    'socket' => env_value($envData, 'DB_SOCKET', ''),
+];
+
+$servername = $dbConfig['host'];
+$username = $dbConfig['username'];
+$password = $dbConfig['password'];
+$dbname = $dbConfig['database'];
+$port = $dbConfig['port'];
+$socket = $dbConfig['socket'];
 
 $userId = $argv[1] ?? null;
 $mode = strtolower($argv[2] ?? 'hybrid');
@@ -45,29 +83,107 @@ if (!$userId || !in_array($mode, ['hybrid','jaccard','cosine'])) {
     exit(1);
 }
 
-$conn = new mysqli($servername, $username, $password, $dbname);
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
+mysqli_report(MYSQLI_REPORT_OFF);
+
+$conn = null;
+$connectErrors = [];
+$attempts = [
+    // Primary from .env
+    ['host' => $servername, 'port' => $port, 'socket' => $socket],
+];
+
+// Fallback for some Windows/XAMPP setups
+if ($servername === '127.0.0.1') {
+    $attempts[] = ['host' => 'localhost', 'port' => $port, 'socket' => $socket];
+}
+if ($socket !== '') {
+    $attempts[] = ['host' => 'localhost', 'port' => $port, 'socket' => $socket];
+}
+
+foreach ($attempts as $idx => $a) {
+    $tmp = @new mysqli($a['host'], $username, $password, $dbname, (int)$a['port'], $a['socket'] ?: null);
+    if ($tmp && !$tmp->connect_error) {
+        $conn = $tmp;
+        break;
+    }
+    $connectErrors[] = sprintf(
+        'attempt#%d host=%s port=%s socket=%s errno=%s error=%s',
+        $idx + 1,
+        $a['host'],
+        (string)$a['port'],
+        $a['socket'] !== '' ? $a['socket'] : '-',
+        (string)mysqli_connect_errno(),
+        mysqli_connect_error() ?: ($tmp ? $tmp->connect_error : 'unknown')
+    );
+}
+
+if (!$conn) {
+    $ctx = sprintf(
+        "db=%s user=%s env_host=%s env_port=%s env_socket=%s",
+        $dbname,
+        $username,
+        $servername,
+        (string)$port,
+        $socket !== '' ? $socket : '-'
+    );
+    die("Connection failed.\n{$ctx}\n" . implode("\n", $connectErrors));
 }
 
 function get_goal_column($conn, $userId, $tableBase) {
+    // Ambil semua kolom dari tabel base case (tetap valid walau tabel kosong)
+    $baseColNames = get_table_columns($conn, $tableBase);
+
     $goalCol = null;
     $goalQuery = $conn->query("SELECT atribut_id, atribut_name FROM atribut WHERE user_id = $userId AND goal = 'T' LIMIT 1");
     if ($goalQuery && $goalQuery->num_rows > 0) {
         $g = $goalQuery->fetch_assoc();
-        $goalCol = $g['atribut_id'] . '_' . $g['atribut_name'];
-    }
-    if ($goalCol === null) {
-        $res = $conn->query("SELECT * FROM $tableBase LIMIT 1");
-        if ($res) {
-            $fieldcount = $res->field_count;
-            $fields = $res->fetch_fields();
-            if ($fieldcount >= 4) {
-                $goalCol = $fields[$fieldcount - 3]->name;
+        $candidateGoalCol = $g['atribut_id'] . '_' . $g['atribut_name'];
+
+        // Verifikasi kolom ada di tabel
+        if (in_array($candidateGoalCol, $baseColNames)) {
+            $goalCol = $candidateGoalCol;
+        } else {
+            // Cari berdasarkan nama atribut (abaikan prefix id)
+            foreach ($baseColNames as $colName) {
+                if (in_array($colName, ['case_id', 'user_id', 'case_num', 'algoritma'])) continue;
+                $parts = explode('_', $colName, 2);
+                if (count($parts) === 2 && strtolower($parts[1]) === strtolower($g['atribut_name'])) {
+                    $goalCol = $colName;
+                    break;
+                }
             }
         }
     }
+
+    // Fallback: kolom pertama setelah case_id (karena ORDER BY goal DESC saat CREATE)
+    if ($goalCol === null) {
+        $skipCols = ['case_id', 'user_id', 'case_num', 'algoritma'];
+        foreach ($baseColNames as $colName) {
+            if (!in_array($colName, $skipCols)) {
+                $goalCol = $colName;
+                break;
+            }
+        }
+    }
+
     return $goalCol;
+}
+
+function table_exists($conn, $tableName) {
+    $safe = $conn->real_escape_string($tableName);
+    $res = $conn->query("SHOW TABLES LIKE '{$safe}'");
+    return $res && $res->num_rows > 0;
+}
+
+function get_table_columns($conn, $tableName) {
+    $cols = [];
+    $res = $conn->query("SHOW COLUMNS FROM `{$tableName}`");
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $cols[] = $row['Field'];
+        }
+    }
+    return $cols;
 }
 
 function normalize_value($value)
@@ -194,25 +310,41 @@ function evaluate($train, $test, $attrCols, $goalCol, $mode, $topK, $threshold, 
 
 $tableBase = "case_user_" . $userId;
 $tableTest = "test_case_user_" . $userId;
-$goalCol = get_goal_column($conn, $userId, $tableBase);
-if (!$goalCol) die("Cannot determine goal column\n");
 
-$baseRes = $conn->query("SELECT * FROM $tableBase LIMIT 1");
-$attrCols = [];
-if ($baseRes) {
-    $fields = $baseRes->fetch_fields();
-    foreach ($fields as $f) {
-        $name = $f->name;
-        if (in_array($name, ['case_id','user_id','case_num'])) continue;
-        if ($name === $goalCol) continue;
-        $attrCols[] = $name;
+if (!table_exists($conn, $tableBase)) {
+    if ($evalMode !== 'testcase' && table_exists($conn, $tableTest)) {
+        // Fallback agar evaluasi tetap bisa jalan jika hanya tabel test_case_user_{id} yang tersedia.
+        $tableBase = $tableTest;
+    } else {
+        die("Training table not found: {$tableBase}. Please generate/import case data first.\n");
     }
+}
+
+if ($evalMode === 'testcase' && !table_exists($conn, $tableTest)) {
+    die("Test table not found: {$tableTest}. Please generate test cases first.\n");
+}
+
+$goalCol = get_goal_column($conn, $userId, $tableBase);
+if (!$goalCol) {
+    $cols = get_table_columns($conn, $tableBase);
+    $colList = $cols ? implode(', ', $cols) : '(no columns)';
+    die("Cannot determine goal column from table {$tableBase}. Columns: {$colList}\n");
+}
+
+$attrCols = [];
+foreach (get_table_columns($conn, $tableBase) as $name) {
+    if (in_array($name, ['case_id','user_id','case_num'])) continue;
+    if ($name === $goalCol) continue;
+    $attrCols[] = $name;
 }
 if (!$attrCols) die("No attribute columns found\n");
 
 $baseCases = [];
 $resBase = $conn->query("SELECT * FROM $tableBase");
 if ($resBase) { while ($r = $resBase->fetch_assoc()) { $baseCases[] = $r; } }
+if (!$baseCases) {
+    die("Training dataset is empty in {$tableBase}\n");
+}
 
 // attribute weights (same entropy-based idea as hybrid_similarity.php)
 $attrWeights = [];
@@ -261,6 +393,9 @@ if ($evalMode === 'testcase') {
     $modeLabel = ucfirst($mode) . ' Similarity';
     $resTest = $conn->query("SELECT * FROM $tableTest WHERE algoritma = '" . $conn->real_escape_string($modeLabel) . "'");
     if ($resTest) { while ($r = $resTest->fetch_assoc()) { $testCases[] = $r; } }
+    if (!$testCases) {
+        die("No testcase rows found in {$tableTest} for algoritma='{$modeLabel}'\n");
+    }
 }
 
 function shuffled($arr) {

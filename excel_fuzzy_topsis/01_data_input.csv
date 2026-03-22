@@ -1,0 +1,18 @@
+FUZZY TOPSIS - DATA INPUT,,,,,,
+,,,,,,
+=== ATRIBUT ===,,,,,,
+ID,Nama,Tipe Data,Goal?,Weight,Type,Normalized Weight
+1,Demam,True/False,F (kriteria),3,benefit,0.5000
+2,Nafsu_Makan,Baik/Buruk,F (kriteria),2,benefit,0.3333
+3,Umur,Angka (tahun),F (kriteria),1,benefit,0.1667
+4,Diagnosis,Teks,T (goal),-,-,-
+,,,,,,
+=== BASE CASES ===,,,,,,
+case_id,Demam,Nafsu_Makan,Umur,Diagnosis,,
+K1,True,Buruk,3,Flu,,
+K2,False,Baik,7,Cacingan,,
+K3,True,Baik,2,Flu,,
+,,,,,,
+=== TEST CASE ===,,,,,,
+case_id,Demam,Nafsu_Makan,Umur,Diagnosis,,
+Test,True,Buruk,4,Flu,,

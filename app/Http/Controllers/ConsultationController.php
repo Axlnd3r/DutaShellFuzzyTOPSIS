@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Support\SvmModelLocator;
+use App\Services\Inference\FuzzyTopsisService;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -62,6 +63,7 @@ class ConsultationController extends Controller
                 }
             };
 
+            $setIfEmpty($pluckCaseIds('inferensi_ft_user_' . $user->user_id, $caseIds), 'Fuzzy TOPSIS');
             $setIfEmpty($pluckCaseIds('inferensi_rf_user_' . $user->user_id, $caseIds), 'Random Forest');
             $setIfEmpty($pluckCaseIds('inferensi_hs_user_' . $user->user_id, $caseIds), 'Hybrid Similarity');
             $setIfEmpty($pluckCaseIds('inferensi_jc_user_' . $user->user_id, $caseIds), 'Jaccard Similarity');
@@ -114,8 +116,6 @@ class ConsultationController extends Controller
 
     /**
      * Simpan 1 baris test_case_user_{userId}, lalu jalankan algoritma sesuai action_type.
-     * action_type: Matching Rule, Forward Chaining, Backward Chaining, Hybrid Similarity,
-     * Jaccard Similarity, Cosine Similarity, Support Vector Machine
      */
     public function store(Request $request)
     {
@@ -132,6 +132,7 @@ class ConsultationController extends Controller
             'Cosine Similarity',
             'Support Vector Machine',
             'Random Forest',
+            'Fuzzy TOPSIS',
         ];
         if (!in_array($actionType, $allowedActions, true)) {
             return back()->withErrors('Pilih algoritma yang tersedia.');
@@ -146,7 +147,7 @@ class ConsultationController extends Controller
             ->orderBy('goal', 'desc')
             ->get();
 
-        // Pastikan kolom algoritma ada supaya penyimpanan tidak gagal di tabel lama
+        // Pastikan kolom algoritma ada
         if (Schema::hasTable($table) && !Schema::hasColumn($table, 'algoritma')) {
             Schema::table($table, function (Blueprint $table) {
                 $table->string('algoritma', 50)->default('')->after('case_num');
@@ -166,7 +167,6 @@ class ConsultationController extends Controller
             if ($request->has($kolom)) {
                 $input = $request->input($kolom);
 
-                // Validasi value terhadap atribut_value
                 $valid = DB::table('atribut_value')
                     ->where('user_id', $user_id)
                     ->where('atribut_id', $atribut->atribut_id)
@@ -180,7 +180,7 @@ class ConsultationController extends Controller
             }
         }
 
-        if (count($data) <= 3) { // hanya user_id, case_num, algoritma - tak ada atribut terisi
+        if (count($data) <= 3) {
             return back()->withErrors('Tidak ada nilai atribut yang diisi.');
         }
 
@@ -240,6 +240,32 @@ class ConsultationController extends Controller
                 ->with('success', 'Random Forest executed!');
         }
 
+        // === Fuzzy TOPSIS
+        if ($actionType === 'Fuzzy TOPSIS') {
+            try {
+                $latestCaseId = (int) DB::table($table)->max('case_id');
+                $result = app(FuzzyTopsisService::class)->infer([
+                    'user_id' => $user_id,
+                    'case_id' => $latestCaseId,
+                    'algorithm' => 'Fuzzy TOPSIS',
+                    'include_intermediate' => false,
+                    'save_debug' => true,
+                ]);
+
+                $topCase = $result['ranking'][0] ?? null;
+                $topInfo = $topCase
+                    ? "Top-1: Case #{$topCase['case_id']} (CC={$topCase['score']})"
+                    : '';
+
+                return redirect('/history')
+                    ->with('success', "Fuzzy TOPSIS executed! {$topInfo}")
+                    ->with('fuzzy_topsis_result', $result);
+            } catch (\Throwable $exception) {
+                report($exception);
+                return back()->withErrors('Fuzzy TOPSIS gagal: ' . $exception->getMessage());
+            }
+        }
+
         // === Support Vector Machine (train + infer + insert ke inferensi_user_{userId} + diagnostics)
         if ($actionType === 'Support Vector Machine') {
             $kernel = $request->input('svm_kernel', 'sgd');
@@ -284,7 +310,7 @@ class ConsultationController extends Controller
             $trainRes = $this->runProcess($trainCmd, 600);
             $diag[]   = $this->diagLine('Train CMD', $trainRes['cmd'], $trainRes['ok']);
 
-            // Cek model JSON hasil training (perkiraan path)
+            // Cek model JSON
             $modelPath   = $this->modelPathGuess($user_id, $kernel);
             $modelExists = is_file($modelPath);
             $diag[]      = $this->diagLine('Model JSON', $modelExists ? $modelPath : 'NOT FOUND', $modelExists);
@@ -332,8 +358,8 @@ class ConsultationController extends Controller
                 return back()->with('error', $msg)->with('svm_diag', implode("\n", $diag));
             }
 
-            $ok = "Training SVM OK.\n{$trainRes['stdout']}\n\nInference OK (added {$added}).\n{$inferRes['stdout']}";
-            return back()->with('success', $ok)->with('svm_diag', implode("\n", $diag));
+            $ok = "Training SVM OK. Inference OK (added {$added}).";
+            return redirect('/history')->with('success', $ok);
         }
 
         return back()->with('error', 'Action tidak dikenali.');
@@ -417,10 +443,6 @@ class ConsultationController extends Controller
 
     /* ============================ HELPERS: PATHS ============================ */
 
-    /**
-     * Resolve path skrip CLI dari ENV (opsional) + fallback kandidat relatif.
-     * Terima absolut/relatif. Lempar exception kalau tak ketemu.
-     */
     private function resolveScriptPath(?string $envPath, array $fallbackRelativeCandidates)
     {
         $candidates = [];
@@ -447,22 +469,18 @@ class ConsultationController extends Controller
         );
     }
 
-    /**
-     * Cek absolut path (Windows/Unix/UNC).
-     */
     private function isAbsolutePath(string $p): bool
     {
         $p = str_replace('\\', '/', $p);
-        return Str::startsWith($p, ['/'])                 // unix absolute
-            || (bool) preg_match('#^[A-Za-z]:/#', $p)     // windows drive
-            || Str::startsWith($p, ['//', '\\\\']);       // UNC
+        return Str::startsWith($p, ['/'])
+            || (bool) preg_match('#^[A-Za-z]:/#', $p)
+            || Str::startsWith($p, ['//', '\\\\']);
     }
 
     /* ============================ HELPERS: DEBUG ============================ */
 
     private function runProcess(array $cmd, int $timeoutSec = 600): array
     {
-        // Hindari request web dipotong 30s saat menunggu proses CLI berat
         @ini_set('max_execution_time', (string) $timeoutSec);
         @set_time_limit($timeoutSec);
         @ignore_user_abort(true);
@@ -479,9 +497,6 @@ class ConsultationController extends Controller
         ];
     }
 
-    /**
-     * Tambahkan override PHP ini_set saat eksekusi proses CLI (hilangkan batas waktu & atur memory_limit).
-     */
     private function withPhpIniOverrides(array $cmd): array
     {
         if (empty($cmd)) {
@@ -499,7 +514,6 @@ class ConsultationController extends Controller
             $opts[] = 'memory_limit=' . $memoryLimit;
         }
 
-        // sisipkan opsi setelah php binary
         array_splice($cmd, 1, 0, $opts);
         return $cmd;
     }
@@ -523,7 +537,6 @@ class ConsultationController extends Controller
         $dirs = SvmModelLocator::directories();
         $fallbackDir = $dirs[0] ?? (function_exists('base_path') ? base_path('svm_models') : getcwd());
 
-        // Normalize to the platform directory separator to avoid mixed "/" and "\" in output.
         $base = rtrim($fallbackDir, '/\\');
         return $base . DIRECTORY_SEPARATOR . $fileName;
     }
