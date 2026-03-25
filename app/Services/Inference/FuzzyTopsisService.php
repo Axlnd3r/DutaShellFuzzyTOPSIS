@@ -42,7 +42,11 @@ class FuzzyTopsisService
             $dataset['criteria']
         );
 
-        $fuzzyMatrix = $this->fuzzification->process($decision['matrix']);
+        $fuzzyMatrix = $this->fuzzification->process(
+            $decision['matrix'],
+            $decision['types'],
+            $decision['ranges']
+        );
         $crispMatrix = $this->defuzzification->process($fuzzyMatrix);
 
         $normalizedResult = $this->normalization->calculate($crispMatrix, $decision['weights']);

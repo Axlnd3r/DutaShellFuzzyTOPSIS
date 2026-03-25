@@ -7,14 +7,15 @@ class FuzzificationService
     /**
      * Konversi matriks keputusan (crisp) → matriks fuzzy (TFN).
      *
-     * Setiap nilai crisp x dikonversi menjadi Triangular Fuzzy Number (a, b, c):
-     *   a = max(0, x - spread)   // lower bound
-     *   b = x                    // middle (nilai asli)
-     *   c = min(1, x + spread)   // upper bound
+     * Semua nilai sudah dalam skala [0,1] (baik cost maupun benefit),
+     * sehingga spread uniform 0.1 diterapkan ke semua kriteria.
      *
-     * Spread default 0.1 menangani ketidakpastian ±10% dari skala [0,1].
+     * TFN(x) = (max(0, x - 0.1), x, min(1, x + 0.1))
+     *
+     * Parameter $types dan $ranges diterima untuk kompatibilitas
+     * dengan pemanggil, namun tidak digunakan karena skala sudah uniform.
      */
-    public function process(array $matrix, float $spread = 0.1): array
+    public function process(array $matrix, array $types = [], array $ranges = [], float $spread = 0.1): array
     {
         $fuzzyMatrix = [];
 
@@ -22,10 +23,9 @@ class FuzzificationService
             foreach ($criteriaValues as $criterion => $value) {
                 $x = $this->clamp((float) $value, 0.0, 1.0);
 
-                // Triangular Fuzzy Number (lower, middle, upper)
-                $a = max(0.0, $x - $spread);  // lower bound
-                $b = $x;                        // middle (nilai asli)
-                $c = min(1.0, $x + $spread);   // upper bound
+                $a = max(0.0, $x - $spread);
+                $b = $x;
+                $c = min(1.0, $x + $spread);
 
                 $fuzzyMatrix[$caseId][$criterion] = [$a, $b, $c];
             }

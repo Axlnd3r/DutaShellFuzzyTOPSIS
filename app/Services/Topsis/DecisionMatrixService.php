@@ -6,7 +6,36 @@ use App\DTO\CaseDTO;
 
 class DecisionMatrixService
 {
-    public function build(array $baseCases, CaseDTO $testCase, array $criteria): array
+    /**
+     * Precompute ranges dari training set saja (tanpa test case).
+     * Gunakan sebelum loop test case untuk menghindari O(N×M) range computation.
+     */
+    public function buildRangesOnly(array $baseCases, array $criteriaColumns): array
+    {
+        $ranges = [];
+        foreach ($criteriaColumns as $column) {
+            $numbers = [];
+            foreach ($baseCases as $case) {
+                if (!$case instanceof CaseDTO) {
+                    continue;
+                }
+                $numericValue = $this->extractNumeric($case->criteriaValues[$column] ?? null);
+                if ($numericValue !== null) {
+                    $numbers[] = $numericValue;
+                }
+            }
+            if ($numbers === []) {
+                continue;
+            }
+            $ranges[$column] = [
+                'min' => min($numbers),
+                'max' => max($numbers),
+            ];
+        }
+        return $ranges;
+    }
+
+    public function build(array $baseCases, CaseDTO $testCase, array $criteria, ?array $precomputedRanges = null): array
     {
         if (empty($baseCases) || empty($criteria)) {
             return [
@@ -25,7 +54,7 @@ class DecisionMatrixService
 
         $weights = $this->normalizeWeights($criteria);
         $types = $this->extractTypes($criteria);
-        $ranges = $this->buildRanges($baseCases, $testCase, $criteriaColumns);
+        $ranges = $precomputedRanges ?? $this->buildRanges($baseCases, $testCase, $criteriaColumns);
 
         $matrix = [];
         foreach ($baseCases as $case) {
@@ -38,8 +67,9 @@ class DecisionMatrixService
                 $baseValue = $case->criteriaValues[$column] ?? null;
                 $testValue = $testCase->criteriaValues[$column] ?? null;
                 $range = $ranges[$column] ?? null;
+                $type = $types[$column] ?? 'benefit';
 
-                $row[$column] = $this->similarityScore($baseValue, $testValue, $range);
+                $row[$column] = $this->similarityScore($baseValue, $testValue, $range, $type);
             }
 
             $matrix[$case->caseId] = $row;
@@ -134,7 +164,20 @@ class DecisionMatrixService
         return $ranges;
     }
 
-    private function similarityScore(mixed $baseValue, mixed $testValue, ?array $range): float
+    /**
+     * Hitung skor per sel matriks keputusan berdasarkan tipe kriteria.
+     *
+     * Kedua tipe menghasilkan nilai [0,1] namun dengan ARAH BERLAWANAN:
+     *
+     * COST:    |base - test| / range → [0,1] dimana 0 = identik (BAIK)
+     *          Cocok dengan TOPSIS: A⁺ = min(vij), A⁻ = max(vij)
+     *
+     * BENEFIT: 1 - |base - test| / range → [0,1] dimana 1 = identik (BAIK)
+     *          Cocok dengan TOPSIS: A⁺ = max(vij), A⁻ = min(vij)
+     *
+     * Skala [0,1] yang uniform memastikan vector normalization tidak bias.
+     */
+    private function similarityScore(mixed $baseValue, mixed $testValue, ?array $range, string $type): float
     {
         $baseNumeric = $this->extractNumeric($baseValue);
         $testNumeric = $this->extractNumeric($testValue);
@@ -146,22 +189,37 @@ class DecisionMatrixService
             }
 
             if ($delta <= 0.0) {
-                return abs($baseNumeric - $testNumeric) < 1.0e-12 ? 1.0 : 0.0;
+                $identical = abs($baseNumeric - $testNumeric) < 1.0e-12;
+                if ($type === 'cost') {
+                    return $identical ? 0.0 : 1.0;  // cost: 0 = sama = baik
+                }
+                return $identical ? 1.0 : 0.0;  // benefit: 1 = sama = baik
             }
 
             $normalizedDifference = abs($baseNumeric - $testNumeric) / $delta;
-            $score = 1.0 - $normalizedDifference;
-            return $this->clamp($score);
+
+            if ($type === 'cost') {
+                // COST: normalized distance [0,1] — 0 = identik (baik), 1 = beda jauh
+                return $this->clamp($normalizedDifference);
+            }
+
+            // BENEFIT: similarity [0,1] — 1 = identik (baik), 0 = beda jauh
+            return $this->clamp(1.0 - $normalizedDifference);
         }
 
+        // Kategorikal: exact match
         $baseText = $this->normalizeText($baseValue);
         $testText = $this->normalizeText($testValue);
 
         if ($baseText === '' || $testText === '') {
-            return 0.0;
+            return ($type === 'cost') ? 1.0 : 0.0;
         }
 
-        return $baseText === $testText ? 1.0 : 0.0;
+        if ($type === 'cost') {
+            return $baseText === $testText ? 0.0 : 1.0;  // cost: match = 0 (baik)
+        }
+
+        return $baseText === $testText ? 1.0 : 0.0;  // benefit: match = 1 (baik)
     }
 
     private function extractNumeric(mixed $value): ?float
@@ -217,4 +275,3 @@ class DecisionMatrixService
         return $value;
     }
 }
-

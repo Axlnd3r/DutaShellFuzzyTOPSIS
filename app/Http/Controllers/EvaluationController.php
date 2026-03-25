@@ -62,6 +62,9 @@ class EvaluationController extends Controller
      */
     public function run(Request $request)
     {
+        set_time_limit(0);
+        ini_set('max_execution_time', '0');
+
         $request->validate([
             'seed' => 'nullable|integer|min:1',
         ]);
@@ -251,14 +254,17 @@ class EvaluationController extends Controller
             return $this->emptyResult();
         }
 
+        // Precompute ranges SEKALI dari training set — hindari O(N×M) per test case
+        $precomputedRanges = $this->decisionMatrix->buildRangesOnly($baseCases, $criteriaColumns);
+
         foreach ($test as $testRow) {
             $testCase = CaseDTO::fromArray($testRow, $criteriaColumns, $goalCol);
             if ($testCase->caseId <= 0) continue;
 
             $actualGoal = $this->normalizeLabel($testCase->goalValue);
 
-            // Run full Fuzzy TOPSIS pipeline
-            $decision = $this->decisionMatrix->build($baseCases, $testCase, $criteria);
+            // Run full Fuzzy TOPSIS pipeline dengan ranges yang sudah precomputed
+            $decision = $this->decisionMatrix->build($baseCases, $testCase, $criteria, $precomputedRanges);
             if (empty($decision['matrix'])) {
                 $records[] = [
                     'case_id' => $testCase->caseId,
@@ -270,7 +276,11 @@ class EvaluationController extends Controller
                 continue;
             }
 
-            $fuzzyMatrix = $this->fuzzification->process($decision['matrix']);
+            $fuzzyMatrix = $this->fuzzification->process(
+                $decision['matrix'],
+                $decision['types'],
+                $decision['ranges']
+            );
             $crispMatrix = $this->defuzzification->process($fuzzyMatrix);
             $normalizedResult = $this->normalization->calculate($crispMatrix, $decision['weights']);
             $ideal = $this->idealSolution->calculate($normalizedResult['weighted'], $decision['types']);
