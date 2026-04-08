@@ -111,7 +111,20 @@ class ConsultationController extends Controller
             ->orderBy('goal', 'desc')
             ->get();
 
-        return view('admin.menu.testCaseTambah', compact('atributs'));
+        // Goal atribut untuk input diagnosis aktual (opsional, untuk validasi Match)
+        $goalAtribut = DB::table('atribut')
+            ->where('user_id', $user_id)
+            ->where('goal', 'T')
+            ->first();
+
+        $goalValues = $goalAtribut
+            ? DB::table('atribut_value')
+                ->where('atribut_id', $goalAtribut->atribut_id)
+                ->where('user_id', $user_id)
+                ->get()
+            : collect();
+
+        return view('admin.menu.testCaseTambah', compact('atributs', 'goalAtribut', 'goalValues'));
     }
 
     /**
@@ -154,29 +167,59 @@ class ConsultationController extends Controller
             });
         }
 
+        // Generate case_id berikutnya
+        $nextCaseId = (DB::table($table)->max('case_id') ?? 0) + 1;
+
         // Payload insert
         $data = [
+            'case_id'   => $nextCaseId,
             'user_id'   => $user_id,
             'case_num'  => $user_id,
             'algoritma' => $actionType,
         ];
 
-        // Isi kolom atribut_id_nama = "valueId_valueName"
+        // Isi kolom atribut_id_nama
         foreach ($atributs as $atribut) {
             $kolom = "{$atribut->atribut_id}_{$atribut->atribut_name}";
             if ($request->has($kolom)) {
                 $input = $request->input($kolom);
 
-                $valid = DB::table('atribut_value')
+                $hasValues = DB::table('atribut_value')
                     ->where('user_id', $user_id)
                     ->where('atribut_id', $atribut->atribut_id)
-                    ->where(DB::raw("CONCAT(value_id, '_', value_name)"), $input)
                     ->exists();
 
-                if (!$valid) {
-                    return back()->withErrors("Invalid value untuk atribut {$atribut->atribut_name}.");
+                if ($hasValues) {
+                    // Atribut kategoris: validasi nilai harus ada di atribut_value
+                    $valid = DB::table('atribut_value')
+                        ->where('user_id', $user_id)
+                        ->where('atribut_id', $atribut->atribut_id)
+                        ->where(DB::raw("CONCAT(value_id, '_', value_name)"), $input)
+                        ->exists();
+
+                    if (!$valid) {
+                        return back()->withErrors("Invalid value untuk atribut {$atribut->atribut_name}.");
+                    }
+                } else {
+                    // Atribut numerik: validasi angka saja
+                    if (!is_numeric($input)) {
+                        return back()->withErrors("Nilai untuk atribut {$atribut->atribut_name} harus berupa angka.");
+                    }
                 }
                 $data[$kolom] = $input;
+            }
+        }
+
+        // Simpan goal/diagnosis aktual jika diisi (opsional)
+        $goalAtribut = DB::table('atribut')
+            ->where('user_id', $user_id)
+            ->where('goal', 'T')
+            ->first();
+        if ($goalAtribut) {
+            $goalInput = $request->input('goal_actual');
+            if (!empty($goalInput)) {
+                $goalKolom = "{$goalAtribut->atribut_id}_{$goalAtribut->atribut_name}";
+                $data[$goalKolom] = $goalInput;
             }
         }
 
@@ -408,14 +451,25 @@ class ConsultationController extends Controller
             if ($request->has($kolom)) {
                 $input = $request->input($kolom);
 
-                $valid = DB::table('atribut_value')
+                $hasValues = DB::table('atribut_value')
                     ->where('user_id', $user_id)
                     ->where('atribut_id', $atribut->atribut_id)
-                    ->where(DB::raw("CONCAT(value_id, '_', value_name)"), $input)
                     ->exists();
 
-                if (!$valid) {
-                    return back()->withErrors("Invalid value untuk atribut {$atribut->atribut_name}.");
+                if ($hasValues) {
+                    $valid = DB::table('atribut_value')
+                        ->where('user_id', $user_id)
+                        ->where('atribut_id', $atribut->atribut_id)
+                        ->where(DB::raw("CONCAT(value_id, '_', value_name)"), $input)
+                        ->exists();
+
+                    if (!$valid) {
+                        return back()->withErrors("Invalid value untuk atribut {$atribut->atribut_name}.");
+                    }
+                } else {
+                    if (!is_numeric($input)) {
+                        return back()->withErrors("Nilai untuk atribut {$atribut->atribut_name} harus berupa angka.");
+                    }
                 }
                 $data[$kolom] = $input;
             }

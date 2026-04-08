@@ -49,17 +49,44 @@
                                 ->get();
                         @endphp
                         <div class="form-group mb-4">
-                            <label for="{{ $atribut->atribut_name }}">{{ ucfirst($atribut->atribut_name) }}</label>
+                            <label for="{{ $atribut->atribut_name }}"><strong>{{ ucfirst($atribut->atribut_name) }}</strong></label>
                             <br>
-                            <label for="{{ $atribut->atribut_desc }}">{{ ucfirst($atribut->atribut_desc) }}</label>
-                            <select name="{{ $atribut->atribut_id }}_{{ $atribut->atribut_name }}" class="form-control" required>
-                                <option value="">Select an option</option>
-                                @foreach($values as $value)
-                                    <option value="{{ $value->value_id . '_' . $value->value_name }}">
-                                        {{ explode('_', $value->value_name, 2)[1] ?? $value->value_name }}
-                                    </option>
-                                @endforeach
-                            </select>
+                            <small class="text-muted">{{ ucfirst($atribut->atribut_desc) }}</small>
+                            @php
+                                // Deteksi range kecil dari deskripsi, misal "(0-3)" atau "(0-4)"
+                                preg_match('/\((\d+)-(\d+)\)/', $atribut->atribut_desc ?? '', $rangeMatch);
+                                $rangeMin = isset($rangeMatch[1]) ? (int)$rangeMatch[1] : null;
+                                $rangeMax = isset($rangeMatch[2]) ? (int)$rangeMatch[2] : null;
+                                $isSmallRange = ($rangeMin !== null && $rangeMax !== null && ($rangeMax - $rangeMin) <= 10);
+                            @endphp
+
+                            @if($values->count() > 0)
+                                {{-- Atribut kategoris: dropdown dari atribut_value --}}
+                                <select name="{{ $atribut->atribut_id }}_{{ $atribut->atribut_name }}" class="form-control mt-1" required>
+                                    <option value="">-- Pilih --</option>
+                                    @foreach($values as $value)
+                                        <option value="{{ $value->value_id . '_' . $value->value_name }}">
+                                            {{ explode('_', $value->value_name, 2)[1] ?? $value->value_name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            @elseif($isSmallRange)
+                                {{-- Atribut dengan range kecil (0-3, 0-4, dst): dropdown integer --}}
+                                <select name="{{ $atribut->atribut_id }}_{{ $atribut->atribut_name }}" class="form-control mt-1" required>
+                                    <option value="">-- Pilih --</option>
+                                    @for($v = $rangeMin; $v <= $rangeMax; $v++)
+                                        <option value="{{ $v }}">{{ $v }}</option>
+                                    @endfor
+                                </select>
+                            @else
+                                {{-- Atribut numerik kontinu: text input --}}
+                                <input type="number"
+                                       step="any"
+                                       name="{{ $atribut->atribut_id }}_{{ $atribut->atribut_name }}"
+                                       class="form-control mt-1"
+                                       placeholder="Masukkan nilai numerik"
+                                       required>
+                            @endif
                         </div>
                     @endfor
                 </div>

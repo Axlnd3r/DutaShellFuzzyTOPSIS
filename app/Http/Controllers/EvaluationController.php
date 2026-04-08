@@ -67,6 +67,8 @@ class EvaluationController extends Controller
 
         $request->validate([
             'seed' => 'nullable|integer|min:1',
+            'scenarios' => 'nullable|array',
+            'scenarios.*' => 'in:80/20,70/30,60/40,50/50,40/60',
         ]);
 
         $userId = Auth::user()->user_id;
@@ -143,16 +145,20 @@ class EvaluationController extends Controller
             $shuffledBase = $baseCases;
             shuffle($shuffledBase);
 
-            // 5 skenario
-            $scenarios = [
-                ['label' => '80/20', 'ratio' => 0.8],
-                ['label' => '70/30', 'ratio' => 0.7],
-                ['label' => '60/40', 'ratio' => 0.6],
-                ['label' => '50/50', 'ratio' => 0.5],
-                ['label' => '40/60', 'ratio' => 0.4],
+            // Skenario yang dipilih user (default: semua 5)
+            $allScenarios = [
+                '80/20' => ['label' => '80/20', 'ratio' => 0.8],
+                '70/30' => ['label' => '70/30', 'ratio' => 0.7],
+                '60/40' => ['label' => '60/40', 'ratio' => 0.6],
+                '50/50' => ['label' => '50/50', 'ratio' => 0.5],
+                '40/60' => ['label' => '40/60', 'ratio' => 0.4],
             ];
+            $selectedKeys = $request->input('scenarios', array_keys($allScenarios));
+            $scenarios = array_values(array_intersect_key($allScenarios, array_flip($selectedKeys)));
 
             $ftResults = [];
+            $foResults = []; // Fuzzy Only
+            $toResults = []; // TOPSIS Only
             $hsResults = [];
             $jcResults = [];
             $csResults = [];
@@ -188,6 +194,24 @@ class EvaluationController extends Controller
                 $ftEval['test_count'] = $testCount;
                 $ftResults[] = $ftEval;
 
+                // --- 1a. Fuzzy Only ---
+                $startFO = microtime(true);
+                $foEval = $this->evaluateFuzzyOnly($train, $test, $criteria, $goalCol);
+                $foEval['time'] = round(microtime(true) - $startFO, 4);
+                $foEval['label'] = $label;
+                $foEval['train_count'] = count($train);
+                $foEval['test_count'] = $testCount;
+                $foResults[] = $foEval;
+
+                // --- 1b. TOPSIS Only ---
+                $startTO = microtime(true);
+                $toEval = $this->evaluateTopsisOnly($train, $test, $criteria, $goalCol);
+                $toEval['time'] = round(microtime(true) - $startTO, 4);
+                $toEval['label'] = $label;
+                $toEval['train_count'] = count($train);
+                $toEval['test_count'] = $testCount;
+                $toResults[] = $toEval;
+
                 // --- 2. Hybrid Similarity ---
                 $startHS = microtime(true);
                 $hsEval = $this->evaluateSimilarity($train, $test, $attrCols, $goalCol, $weights, 'hybrid', 0.5);
@@ -219,6 +243,8 @@ class EvaluationController extends Controller
             return back()
                 ->with('eval_ok', true)
                 ->with('ft_results', $ftResults)
+                ->with('fo_results', $foResults)
+                ->with('to_results', $toResults)
                 ->with('hs_results', $hsResults)
                 ->with('jc_results', $jcResults)
                 ->with('cs_results', $csResults)
@@ -227,7 +253,8 @@ class EvaluationController extends Controller
                 ->with('total_base', $totalBase)
                 ->with('total_test', $totalFixed)
                 ->with('total_all', $totalAll)
-                ->with('removed_overlap', $removedCount);
+                ->with('removed_overlap', $removedCount)
+                ->with('selected_scenarios', $selectedKeys);
         } catch (\Throwable $e) {
             return back()->with('eval_err', 'Error: ' . $e->getMessage());
         }
@@ -300,6 +327,118 @@ class EvaluationController extends Controller
                 'score' => $ccScore,
                 'top_case' => $topCaseId,
             ];
+        }
+
+        return $this->buildMultiClassMetrics($records);
+    }
+
+    // ==================== FUZZY ONLY EVALUATION ====================
+
+    /**
+     * Fuzzy Only: DM Similarity → Fuzzifikasi TFN → Defuzzifikasi → ranking by rata-rata crisp value.
+     * Tanpa normalisasi vektor, tanpa D+/D-, tanpa CC.
+     * Top-1 dipilih berdasarkan rata-rata crisp tertinggi (semakin tinggi = semakin mirip).
+     */
+    private function evaluateFuzzyOnly(array $train, array $test, array $criteria, string $goalCol): array
+    {
+        $criteriaColumns = array_map(fn($c) => $c['column'], $criteria);
+        $records = [];
+
+        $baseCases = [];
+        $goalMap = [];
+        foreach ($train as $row) {
+            $case = CaseDTO::fromArray($row, $criteriaColumns, $goalCol);
+            if ($case->caseId <= 0) continue;
+            $baseCases[] = $case;
+            $goalMap[$case->caseId] = $case->goalValue;
+        }
+
+        if (empty($baseCases)) return $this->emptyResult();
+
+        $precomputedRanges = $this->decisionMatrix->buildRangesOnly($baseCases, $criteriaColumns);
+
+        foreach ($test as $testRow) {
+            $testCase = CaseDTO::fromArray($testRow, $criteriaColumns, $goalCol);
+            if ($testCase->caseId <= 0) continue;
+
+            $actualGoal = $this->normalizeLabel($testCase->goalValue);
+
+            $decision = $this->decisionMatrix->build($baseCases, $testCase, $criteria, $precomputedRanges);
+            if (empty($decision['matrix'])) {
+                $records[] = ['case_id' => $testCase->caseId, 'actual' => $actualGoal, 'predicted' => '', 'score' => 0, 'top_case' => 0];
+                continue;
+            }
+
+            // Fuzzy Only: DM → Fuzzifikasi → Defuzzifikasi → rata-rata crisp per kasus
+            $fuzzyMatrix = $this->fuzzification->process($decision['matrix'], $decision['types'], $decision['ranges']);
+            $crispMatrix = $this->defuzzification->process($fuzzyMatrix);
+
+            // Ranking: jumlah rata-rata semua crisp value per kasus (higher = more similar)
+            $scores = [];
+            foreach ($crispMatrix as $caseId => $crit) {
+                $avg = count($crit) > 0 ? array_sum($crit) / count($crit) : 0.0;
+                $scores[] = ['case_id' => (int) $caseId, 'score' => $avg];
+            }
+            usort($scores, fn($a, $b) => $b['score'] <=> $a['score']);
+
+            $top = $scores[0] ?? null;
+            $topCaseId = $top ? (int) $top['case_id'] : 0;
+            $predictedGoal = $this->normalizeLabel($goalMap[$topCaseId] ?? '');
+
+            $records[] = ['case_id' => $testCase->caseId, 'actual' => $actualGoal, 'predicted' => $predictedGoal, 'score' => $top ? $top['score'] : 0.0, 'top_case' => $topCaseId];
+        }
+
+        return $this->buildMultiClassMetrics($records);
+    }
+
+    // ==================== TOPSIS ONLY EVALUATION ====================
+
+    /**
+     * TOPSIS Only: DM Similarity → Normalisasi Vektor → Weighted → D+/D- → CC → Ranking.
+     * Tanpa Fuzzifikasi dan Defuzzifikasi (skip langkah fuzzy).
+     */
+    private function evaluateTopsisOnly(array $train, array $test, array $criteria, string $goalCol): array
+    {
+        $criteriaColumns = array_map(fn($c) => $c['column'], $criteria);
+        $records = [];
+
+        $baseCases = [];
+        $goalMap = [];
+        foreach ($train as $row) {
+            $case = CaseDTO::fromArray($row, $criteriaColumns, $goalCol);
+            if ($case->caseId <= 0) continue;
+            $baseCases[] = $case;
+            $goalMap[$case->caseId] = $case->goalValue;
+        }
+
+        if (empty($baseCases)) return $this->emptyResult();
+
+        $precomputedRanges = $this->decisionMatrix->buildRangesOnly($baseCases, $criteriaColumns);
+
+        foreach ($test as $testRow) {
+            $testCase = CaseDTO::fromArray($testRow, $criteriaColumns, $goalCol);
+            if ($testCase->caseId <= 0) continue;
+
+            $actualGoal = $this->normalizeLabel($testCase->goalValue);
+
+            $decision = $this->decisionMatrix->build($baseCases, $testCase, $criteria, $precomputedRanges);
+            if (empty($decision['matrix'])) {
+                $records[] = ['case_id' => $testCase->caseId, 'actual' => $actualGoal, 'predicted' => '', 'score' => 0, 'top_case' => 0];
+                continue;
+            }
+
+            // TOPSIS Only: DM → langsung normalisasi vektor (skip fuzzy)
+            $normalizedResult = $this->normalization->calculate($decision['matrix'], $decision['weights']);
+            $ideal = $this->idealSolution->calculate($normalizedResult['weighted'], $decision['types']);
+            $distances = $this->distance->calculate($normalizedResult['weighted'], $ideal);
+            $ranking = $this->ranking->rank($distances);
+
+            $top = $ranking[0] ?? null;
+            $topCaseId = $top ? (int) $top['case_id'] : 0;
+            $predictedGoal = $this->normalizeLabel($goalMap[$topCaseId] ?? '');
+            $ccScore = $top ? (float) $top['score'] : 0.0;
+
+            $records[] = ['case_id' => $testCase->caseId, 'actual' => $actualGoal, 'predicted' => $predictedGoal, 'score' => $ccScore, 'top_case' => $topCaseId];
         }
 
         return $this->buildMultiClassMetrics($records);

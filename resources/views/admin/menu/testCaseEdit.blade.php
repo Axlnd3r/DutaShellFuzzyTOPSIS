@@ -27,17 +27,28 @@
                     ->get();
             @endphp
 
-            <div class="form-group col-md-6">
-                <label for="{{ $kolom_name }}">{{ ucfirst($atribut->atribut_name) }}</label>
-                <select name="{{ $kolom_name }}" id="{{ $kolom_name }}" class="form-control" required>
-                    <option value="">Select an option</option>
-                    @foreach ($values as $value)
-                        <option value="{{ $value->value_id . '_' . $value->value_name }}" 
-                            {{ $current_value == ($value->value_id . '_' . $value->value_name) ? 'selected' : '' }}>
-                            {{ explode('_', $value->value_name, 2)[1] ?? $value->value_name }}
-                        </option>
-                    @endforeach
-                </select>
+            <div class="form-group col-md-6 mb-3">
+                <label for="{{ $kolom_name }}"><strong>{{ ucfirst($atribut->atribut_name) }}</strong></label>
+                @if($values->count() > 0)
+                    <select name="{{ $kolom_name }}" id="{{ $kolom_name }}" class="form-control" required>
+                        <option value="">-- Pilih --</option>
+                        @foreach ($values as $value)
+                            <option value="{{ $value->value_id . '_' . $value->value_name }}"
+                                {{ $current_value == ($value->value_id . '_' . $value->value_name) ? 'selected' : '' }}>
+                                {{ explode('_', $value->value_name, 2)[1] ?? $value->value_name }}
+                            </option>
+                        @endforeach
+                    </select>
+                @else
+                    <input type="number"
+                           step="any"
+                           name="{{ $kolom_name }}"
+                           id="{{ $kolom_name }}"
+                           class="form-control"
+                           value="{{ $current_value }}"
+                           placeholder="Masukkan nilai numerik"
+                           required>
+                @endif
             </div>
         @endforeach
     </div>

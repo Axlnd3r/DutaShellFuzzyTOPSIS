@@ -169,9 +169,30 @@ class FuzzyTopsisService
 
         $baseCases = [];
         $goalMap = [];
-        $baseRows = DB::table($baseTable)->get();
-        foreach ($baseRows as $rowObject) {
-            $row = (array) $rowObject;
+        $baseRows = DB::table($baseTable)->get()->map(fn($r) => (array) $r)->all();
+
+        // Ambil test case row terlebih dahulu untuk exclusion
+        $testRow = $this->resolveTestCaseRow($testTable, $input);
+        $testCriteriaValues = [];
+        foreach ($criteriaColumns as $col) {
+            $testCriteriaValues[$col] = $testRow[$col] ?? null;
+        }
+
+        // Filter: keluarkan kasus yang identik dengan test case dari training
+        $baseRows = array_values(array_filter($baseRows, function ($row) use ($criteriaColumns, $testCriteriaValues) {
+            foreach ($criteriaColumns as $col) {
+                $b = $row[$col] ?? null;
+                $t = $testCriteriaValues[$col] ?? null;
+                if (is_numeric($b) && is_numeric($t)) {
+                    if (abs((float)$b - (float)$t) > 1e-9) return true;
+                } else {
+                    if ((string)$b !== (string)$t) return true;
+                }
+            }
+            return false; // semua atribut identik → exclude
+        }));
+
+        foreach ($baseRows as $row) {
             $case = CaseDTO::fromArray($row, $criteriaColumns, $goalColumn);
             if ($case->caseId <= 0) {
                 continue;
@@ -185,7 +206,7 @@ class FuzzyTopsisService
             throw new InvalidArgumentException("Tabel {$baseTable} tidak memiliki data kasus.");
         }
 
-        $testRow = $this->resolveTestCaseRow($testTable, $input);
+        // $testRow sudah di-resolve di atas untuk exclusion filter
         $testCase = CaseDTO::fromArray($testRow, $criteriaColumns, $goalColumn);
         if ($testCase->caseId <= 0) {
             throw new InvalidArgumentException('Test case tidak valid.');
@@ -418,8 +439,8 @@ class FuzzyTopsisService
                 'case_goal' => $testGoal ?? '',
                 'rule_id' => 'FT-' . $caseId,
                 'rule_goal' => $baseGoal ?? '',
-                'match_value' => round($score, 6),
-                'score' => round($score, 6),
+                'match_value' => ceil($score * 10000) / 10000,
+                'score' => ceil($score * 10000) / 10000,
                 'rank' => $rank,
                 's_plus' => round($sPlus, 6),
                 's_minus' => round($sMinus, 6),

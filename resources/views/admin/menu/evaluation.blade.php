@@ -14,6 +14,8 @@
   .winner { color: #198754; }
   .loser  { color: #dc3545; }
   .algo-header-ft { background: #0d6efd !important; color: #fff; }
+  .algo-header-fo { background: #20c997 !important; color: #fff; }
+  .algo-header-to { background: #6610f2 !important; color: #fff; }
   .algo-header-hs { background: #dc3545 !important; color: #fff; }
   .algo-header-jc { background: #6f42c1 !important; color: #fff; }
   .algo-header-cs { background: #fd7e14 !important; color: #fff; }
@@ -49,22 +51,27 @@
           <input type="number" name="seed" class="form-control" value="{{ session('eval_seed', 42) }}" min="1">
           <small class="text-muted">Seed sama = split konsisten (reprodusibel)</small>
         </div>
-        <div class="col-md-6">
-          <label class="form-label">5 Skenario Train/Test (total = basis + test case)</label>
-          <div class="d-flex gap-2 flex-wrap">
-            <span class="badge bg-primary fs-6">80/20</span>
-            <span class="badge bg-primary fs-6">70/30</span>
-            <span class="badge bg-primary fs-6">60/40</span>
-            <span class="badge bg-primary fs-6">50/50</span>
-            <span class="badge bg-primary fs-6">40/60</span>
+        <div class="col-md-8">
+          <label class="form-label">Pilih Skenario Train/Test <small class="text-muted">(klik satu untuk langsung jalankan, atau centang beberapa lalu klik Jalankan)</small></label>
+          @php $prevSelected = session('selected_scenarios', ['80/20','70/30','60/40','50/50','40/60']); @endphp
+          <div class="d-flex gap-2 flex-wrap mb-2" id="scenarioBtns">
+            @foreach(['80/20','70/30','60/40','50/50','40/60'] as $sc)
+            @php $isChecked = in_array($sc, $prevSelected); @endphp
+            <label class="btn {{ $isChecked ? 'btn-primary active' : 'btn-outline-secondary' }} scenario-label">
+              <input type="checkbox" name="scenarios[]" value="{{ $sc }}" {{ $isChecked ? 'checked' : '' }} class="d-none scenario-cb">
+              {{ $sc }}
+            </label>
+            @endforeach
           </div>
-          <small class="text-muted">Fixed test set selalu masuk ke test di semua skenario</small>
+          <div class="d-flex gap-2 flex-wrap">
+            <button type="button" class="btn btn-sm btn-outline-primary" id="btnSelectAll">Pilih Semua</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnDeselectAll">Hapus Pilihan</button>
+            <button class="btn btn-primary btn-sm" id="btnRun">
+              <i class="fas fa-play me-1"></i> Jalankan Terpilih
+            </button>
+          </div>
         </div>
-        <div class="col-md-3 d-flex align-items-end">
-          <button class="btn btn-primary w-100" id="btnRun">
-            <i class="fas fa-play me-1"></i> Jalankan Semua Skenario
-          </button>
-        </div>
+        <div class="col-md-1"></div>
       </form>
     </div>
   </div>
@@ -73,22 +80,16 @@
   @if(session('eval_ok'))
   @php
     $ftResults = session('ft_results', []);
+    $foResults = session('fo_results', []);
+    $toResults = session('to_results', []);
     $hsResults = session('hs_results', []);
     $jcResults = session('jc_results', []);
     $csResults = session('cs_results', []);
-    $totalBase = session('total_base', 0);
+    $totalBase      = session('total_base', 0);
     $totalTest      = session('total_test', 0);
     $totalAll       = session('total_all', 0);
     $removedOverlap = session('removed_overlap', 0);
     $evalMode       = session('eval_mode', 'B');
-
-    // Define algorithms for easy iteration
-    $algorithms = [
-        'ft' => ['name' => 'Fuzzy TOPSIS', 'short' => 'FT', 'results' => $ftResults, 'color' => 'primary', 'headerClass' => 'algo-header-ft', 'icon' => 'fa-brain'],
-        'hs' => ['name' => 'Hybrid Similarity', 'short' => 'HS', 'results' => $hsResults, 'color' => 'danger', 'headerClass' => 'algo-header-hs', 'icon' => 'fa-project-diagram'],
-        'jc' => ['name' => 'Jaccard Similarity', 'short' => 'JC', 'results' => $jcResults, 'color' => 'purple', 'headerClass' => 'algo-header-jc', 'icon' => 'fa-th'],
-        'cs' => ['name' => 'Cosine Similarity', 'short' => 'CS', 'results' => $csResults, 'color' => 'warning', 'headerClass' => 'algo-header-cs', 'icon' => 'fa-ruler-combined'],
-    ];
   @endphp
 
   <div class="alert alert-success mb-3">
@@ -113,27 +114,29 @@
       @endif
     @endif
     <br>Seed: <strong>{{ session('eval_seed', 42) }}</strong>.
-    Algoritma: <strong>4</strong> (Fuzzy TOPSIS, Hybrid Similarity, Jaccard, Cosine).
+    Algoritma: <strong>6</strong> (Fuzzy TOPSIS, Fuzzy Only, TOPSIS Only, Hybrid Similarity, Jaccard, Cosine).
   </div>
 
   {{-- ======================== COMPARISON TABLE ======================== --}}
   <div class="card mb-4">
-    <div class="card-header fw-semibold"><i class="fas fa-table me-1"></i> Tabel Perbandingan: 4 Algoritma</div>
+    <div class="card-header fw-semibold"><i class="fas fa-table me-1"></i> Tabel Perbandingan: 6 Algoritma <small class="text-white-50">(Pemenang berdasarkan F1-Score Macro)</small></div>
     <div class="card-body table-responsive">
-      <table class="table table-bordered table-hover text-center align-middle mb-0" style="font-size: 13px;">
+      <table class="table table-bordered table-hover text-center align-middle mb-0" style="font-size: 12px;">
         <thead class="table-dark">
           <tr>
             <th rowspan="2">Skenario</th>
             <th rowspan="2">Train</th>
             <th rowspan="2">Test</th>
             <th colspan="4" class="algo-header-ft">Fuzzy TOPSIS</th>
+            <th colspan="4" class="algo-header-fo">Fuzzy Only</th>
+            <th colspan="4" class="algo-header-to">TOPSIS Only</th>
             <th colspan="4" class="algo-header-hs">Hybrid Similarity</th>
             <th colspan="4" class="algo-header-jc">Jaccard Similarity</th>
             <th colspan="4" class="algo-header-cs">Cosine Similarity</th>
-            <th rowspan="2">Pemenang</th>
+            <th rowspan="2">Pemenang (F1)</th>
           </tr>
           <tr>
-            @for($a = 0; $a < 4; $a++)
+            @for($a = 0; $a < 6; $a++)
             <th>Acc</th><th>Prec</th><th>Rec</th><th>F1</th>
             @endfor
           </tr>
@@ -141,18 +144,23 @@
         <tbody>
           @foreach($ftResults as $i => $ft)
           @php
+            $fo = $foResults[$i] ?? [];
+            $to = $toResults[$i] ?? [];
             $hs = $hsResults[$i] ?? [];
             $jc = $jcResults[$i] ?? [];
             $cs = $csResults[$i] ?? [];
 
-            $accs = [
-                'Fuzzy TOPSIS'      => $ft['accuracy'] ?? 0,
-                'Hybrid Sim'        => $hs['accuracy'] ?? 0,
-                'Jaccard Sim'       => $jc['accuracy'] ?? 0,
-                'Cosine Sim'        => $cs['accuracy'] ?? 0,
+            // Pemenang berdasarkan F1-Score Macro
+            $f1s = [
+                'Fuzzy TOPSIS'  => $ft['macro_f1'] ?? 0,
+                'Fuzzy Only'    => $fo['macro_f1'] ?? 0,
+                'TOPSIS Only'   => $to['macro_f1'] ?? 0,
+                'Hybrid Sim'    => $hs['macro_f1'] ?? 0,
+                'Jaccard Sim'   => $jc['macro_f1'] ?? 0,
+                'Cosine Sim'    => $cs['macro_f1'] ?? 0,
             ];
-            $bestAcc = max($accs);
-            $winners = array_keys($accs, $bestAcc);
+            $bestF1 = max($f1s);
+            $winners = array_keys($f1s, $bestF1);
             $winnerLabel = count($winners) > 1 ? 'Seri' : $winners[0];
           @endphp
           <tr>
@@ -160,25 +168,35 @@
             <td>{{ $ft['train_count'] }}</td>
             <td>{{ $ft['test_count'] }}</td>
             {{-- FT --}}
-            <td class="{{ ($ft['accuracy'] ?? 0) == $bestAcc ? 'fw-bold text-success' : '' }}">{{ number_format(($ft['accuracy'] ?? 0) * 100, 2) }}%</td>
+            <td>{{ number_format(($ft['accuracy'] ?? 0) * 100, 2) }}%</td>
             <td>{{ number_format(($ft['macro_precision'] ?? 0) * 100, 2) }}%</td>
             <td>{{ number_format(($ft['macro_recall'] ?? 0) * 100, 2) }}%</td>
-            <td>{{ number_format(($ft['macro_f1'] ?? 0) * 100, 2) }}%</td>
+            <td class="{{ ($ft['macro_f1'] ?? 0) == $bestF1 ? 'fw-bold text-success' : '' }}">{{ number_format(($ft['macro_f1'] ?? 0) * 100, 2) }}%</td>
+            {{-- FO --}}
+            <td>{{ number_format(($fo['accuracy'] ?? 0) * 100, 2) }}%</td>
+            <td>{{ number_format(($fo['macro_precision'] ?? 0) * 100, 2) }}%</td>
+            <td>{{ number_format(($fo['macro_recall'] ?? 0) * 100, 2) }}%</td>
+            <td class="{{ ($fo['macro_f1'] ?? 0) == $bestF1 ? 'fw-bold text-success' : '' }}">{{ number_format(($fo['macro_f1'] ?? 0) * 100, 2) }}%</td>
+            {{-- TO --}}
+            <td>{{ number_format(($to['accuracy'] ?? 0) * 100, 2) }}%</td>
+            <td>{{ number_format(($to['macro_precision'] ?? 0) * 100, 2) }}%</td>
+            <td>{{ number_format(($to['macro_recall'] ?? 0) * 100, 2) }}%</td>
+            <td class="{{ ($to['macro_f1'] ?? 0) == $bestF1 ? 'fw-bold text-success' : '' }}">{{ number_format(($to['macro_f1'] ?? 0) * 100, 2) }}%</td>
             {{-- HS --}}
-            <td class="{{ ($hs['accuracy'] ?? 0) == $bestAcc ? 'fw-bold text-success' : '' }}">{{ number_format(($hs['accuracy'] ?? 0) * 100, 2) }}%</td>
+            <td>{{ number_format(($hs['accuracy'] ?? 0) * 100, 2) }}%</td>
             <td>{{ number_format(($hs['macro_precision'] ?? 0) * 100, 2) }}%</td>
             <td>{{ number_format(($hs['macro_recall'] ?? 0) * 100, 2) }}%</td>
-            <td>{{ number_format(($hs['macro_f1'] ?? 0) * 100, 2) }}%</td>
+            <td class="{{ ($hs['macro_f1'] ?? 0) == $bestF1 ? 'fw-bold text-success' : '' }}">{{ number_format(($hs['macro_f1'] ?? 0) * 100, 2) }}%</td>
             {{-- JC --}}
-            <td class="{{ ($jc['accuracy'] ?? 0) == $bestAcc ? 'fw-bold text-success' : '' }}">{{ number_format(($jc['accuracy'] ?? 0) * 100, 2) }}%</td>
+            <td>{{ number_format(($jc['accuracy'] ?? 0) * 100, 2) }}%</td>
             <td>{{ number_format(($jc['macro_precision'] ?? 0) * 100, 2) }}%</td>
             <td>{{ number_format(($jc['macro_recall'] ?? 0) * 100, 2) }}%</td>
-            <td>{{ number_format(($jc['macro_f1'] ?? 0) * 100, 2) }}%</td>
+            <td class="{{ ($jc['macro_f1'] ?? 0) == $bestF1 ? 'fw-bold text-success' : '' }}">{{ number_format(($jc['macro_f1'] ?? 0) * 100, 2) }}%</td>
             {{-- CS --}}
-            <td class="{{ ($cs['accuracy'] ?? 0) == $bestAcc ? 'fw-bold text-success' : '' }}">{{ number_format(($cs['accuracy'] ?? 0) * 100, 2) }}%</td>
+            <td>{{ number_format(($cs['accuracy'] ?? 0) * 100, 2) }}%</td>
             <td>{{ number_format(($cs['macro_precision'] ?? 0) * 100, 2) }}%</td>
             <td>{{ number_format(($cs['macro_recall'] ?? 0) * 100, 2) }}%</td>
-            <td>{{ number_format(($cs['macro_f1'] ?? 0) * 100, 2) }}%</td>
+            <td class="{{ ($cs['macro_f1'] ?? 0) == $bestF1 ? 'fw-bold text-success' : '' }}">{{ number_format(($cs['macro_f1'] ?? 0) * 100, 2) }}%</td>
             {{-- Winner --}}
             <td class="fw-bold">{{ $winnerLabel }}</td>
           </tr>
@@ -187,49 +205,32 @@
         <tfoot class="table-light">
           @php
             $n = count($ftResults) ?: 1;
-            $avgFtAcc = array_sum(array_column($ftResults, 'accuracy')) / $n;
-            $avgHsAcc = array_sum(array_column($hsResults, 'accuracy')) / $n;
-            $avgJcAcc = array_sum(array_column($jcResults, 'accuracy')) / $n;
-            $avgCsAcc = array_sum(array_column($csResults, 'accuracy')) / $n;
-
-            $avgFtP = array_sum(array_column($ftResults, 'macro_precision')) / $n;
-            $avgHsP = array_sum(array_column($hsResults, 'macro_precision')) / $n;
-            $avgJcP = array_sum(array_column($jcResults, 'macro_precision')) / $n;
-            $avgCsP = array_sum(array_column($csResults, 'macro_precision')) / $n;
-
-            $avgFtR = array_sum(array_column($ftResults, 'macro_recall')) / $n;
-            $avgHsR = array_sum(array_column($hsResults, 'macro_recall')) / $n;
-            $avgJcR = array_sum(array_column($jcResults, 'macro_recall')) / $n;
-            $avgCsR = array_sum(array_column($csResults, 'macro_recall')) / $n;
-
             $avgFtF1 = array_sum(array_column($ftResults, 'macro_f1')) / $n;
+            $avgFoF1 = array_sum(array_column($foResults, 'macro_f1')) / $n;
+            $avgToF1 = array_sum(array_column($toResults, 'macro_f1')) / $n;
             $avgHsF1 = array_sum(array_column($hsResults, 'macro_f1')) / $n;
             $avgJcF1 = array_sum(array_column($jcResults, 'macro_f1')) / $n;
             $avgCsF1 = array_sum(array_column($csResults, 'macro_f1')) / $n;
 
-            $avgAccs = ['Fuzzy TOPSIS' => $avgFtAcc, 'Hybrid Sim' => $avgHsAcc, 'Jaccard Sim' => $avgJcAcc, 'Cosine Sim' => $avgCsAcc];
-            $bestAvg = max($avgAccs);
-            $avgWinners = array_keys($avgAccs, $bestAvg);
+            $avgF1s = ['Fuzzy TOPSIS' => $avgFtF1, 'Fuzzy Only' => $avgFoF1, 'TOPSIS Only' => $avgToF1, 'Hybrid Sim' => $avgHsF1, 'Jaccard Sim' => $avgJcF1, 'Cosine Sim' => $avgCsF1];
+            $bestAvgF1 = max($avgF1s);
+            $avgWinners = array_keys($avgF1s, $bestAvgF1);
             $avgWinnerLabel = count($avgWinners) > 1 ? 'Seri' : $avgWinners[0];
           @endphp
           <tr class="comparison-row">
             <td colspan="3"><strong>Rata-rata</strong></td>
-            <td class="{{ $avgFtAcc == $bestAvg ? 'winner' : '' }}">{{ number_format($avgFtAcc * 100, 2) }}%</td>
-            <td>{{ number_format($avgFtP * 100, 2) }}%</td>
-            <td>{{ number_format($avgFtR * 100, 2) }}%</td>
-            <td>{{ number_format($avgFtF1 * 100, 2) }}%</td>
-            <td class="{{ $avgHsAcc == $bestAvg ? 'winner' : '' }}">{{ number_format($avgHsAcc * 100, 2) }}%</td>
-            <td>{{ number_format($avgHsP * 100, 2) }}%</td>
-            <td>{{ number_format($avgHsR * 100, 2) }}%</td>
-            <td>{{ number_format($avgHsF1 * 100, 2) }}%</td>
-            <td class="{{ $avgJcAcc == $bestAvg ? 'winner' : '' }}">{{ number_format($avgJcAcc * 100, 2) }}%</td>
-            <td>{{ number_format($avgJcP * 100, 2) }}%</td>
-            <td>{{ number_format($avgJcR * 100, 2) }}%</td>
-            <td>{{ number_format($avgJcF1 * 100, 2) }}%</td>
-            <td class="{{ $avgCsAcc == $bestAvg ? 'winner' : '' }}">{{ number_format($avgCsAcc * 100, 2) }}%</td>
-            <td>{{ number_format($avgCsP * 100, 2) }}%</td>
-            <td>{{ number_format($avgCsR * 100, 2) }}%</td>
-            <td>{{ number_format($avgCsF1 * 100, 2) }}%</td>
+            <td colspan="3"></td>
+            <td class="{{ $avgFtF1 == $bestAvgF1 ? 'winner' : '' }}"><strong>{{ number_format($avgFtF1 * 100, 2) }}%</strong></td>
+            <td colspan="3"></td>
+            <td class="{{ $avgFoF1 == $bestAvgF1 ? 'winner' : '' }}"><strong>{{ number_format($avgFoF1 * 100, 2) }}%</strong></td>
+            <td colspan="3"></td>
+            <td class="{{ $avgToF1 == $bestAvgF1 ? 'winner' : '' }}"><strong>{{ number_format($avgToF1 * 100, 2) }}%</strong></td>
+            <td colspan="3"></td>
+            <td class="{{ $avgHsF1 == $bestAvgF1 ? 'winner' : '' }}"><strong>{{ number_format($avgHsF1 * 100, 2) }}%</strong></td>
+            <td colspan="3"></td>
+            <td class="{{ $avgJcF1 == $bestAvgF1 ? 'winner' : '' }}"><strong>{{ number_format($avgJcF1 * 100, 2) }}%</strong></td>
+            <td colspan="3"></td>
+            <td class="{{ $avgCsF1 == $bestAvgF1 ? 'winner' : '' }}"><strong>{{ number_format($avgCsF1 * 100, 2) }}%</strong></td>
             <td class="fw-bold">{{ $avgWinnerLabel }}</td>
           </tr>
         </tfoot>
@@ -251,14 +252,18 @@
   <div class="tab-content" id="scenarioTabContent">
     @foreach($ftResults as $i => $ft)
     @php
+      $fo = $foResults[$i] ?? [];
+      $to = $toResults[$i] ?? [];
       $hs = $hsResults[$i] ?? [];
       $jc = $jcResults[$i] ?? [];
       $cs = $csResults[$i] ?? [];
       $scenarioAlgos = [
-          ['key' => 'ft', 'data' => $ft, 'name' => 'Fuzzy TOPSIS', 'headerClass' => 'algo-header-ft', 'icon' => 'fa-brain', 'maxVar' => 'maxFt'.$i],
-          ['key' => 'hs', 'data' => $hs, 'name' => 'Hybrid Similarity', 'headerClass' => 'algo-header-hs', 'icon' => 'fa-project-diagram', 'maxVar' => 'maxHs'.$i],
-          ['key' => 'jc', 'data' => $jc, 'name' => 'Jaccard Similarity', 'headerClass' => 'algo-header-jc', 'icon' => 'fa-th', 'maxVar' => 'maxJc'.$i],
-          ['key' => 'cs', 'data' => $cs, 'name' => 'Cosine Similarity', 'headerClass' => 'algo-header-cs', 'icon' => 'fa-ruler-combined', 'maxVar' => 'maxCs'.$i],
+          ['key' => 'ft', 'data' => $ft, 'name' => 'Fuzzy TOPSIS',      'headerClass' => 'algo-header-ft', 'icon' => 'fa-brain'],
+          ['key' => 'fo', 'data' => $fo, 'name' => 'Fuzzy Only',         'headerClass' => 'algo-header-fo', 'icon' => 'fa-cloud'],
+          ['key' => 'to', 'data' => $to, 'name' => 'TOPSIS Only',        'headerClass' => 'algo-header-to', 'icon' => 'fa-sort-amount-down'],
+          ['key' => 'hs', 'data' => $hs, 'name' => 'Hybrid Similarity',  'headerClass' => 'algo-header-hs', 'icon' => 'fa-project-diagram'],
+          ['key' => 'jc', 'data' => $jc, 'name' => 'Jaccard Similarity', 'headerClass' => 'algo-header-jc', 'icon' => 'fa-th'],
+          ['key' => 'cs', 'data' => $cs, 'name' => 'Cosine Similarity',  'headerClass' => 'algo-header-cs', 'icon' => 'fa-ruler-combined'],
       ];
     @endphp
     <div class="tab-pane fade {{ $i === 0 ? 'show active' : '' }}" id="scenario{{ $i }}">
@@ -276,25 +281,25 @@
               <div class="row g-2 mb-3">
                 <div class="col-3">
                   <div class="metric-card bg-light">
-                    <h3 class="text-primary">{{ number_format(($d['accuracy'] ?? 0) * 100, 1) }}%</h3>
+                    <h3 class="text-primary">{{ number_format(($d['accuracy'] ?? 0) * 100, 2) }}%</h3>
                     <small>Accuracy</small>
                   </div>
                 </div>
                 <div class="col-3">
                   <div class="metric-card bg-light">
-                    <h3 class="text-info">{{ number_format(($d['macro_precision'] ?? 0) * 100, 1) }}%</h3>
+                    <h3 class="text-info">{{ number_format(($d['macro_precision'] ?? 0) * 100, 2) }}%</h3>
                     <small>Precision</small>
                   </div>
                 </div>
                 <div class="col-3">
                   <div class="metric-card bg-light">
-                    <h3 class="text-warning">{{ number_format(($d['macro_recall'] ?? 0) * 100, 1) }}%</h3>
+                    <h3 class="text-warning">{{ number_format(($d['macro_recall'] ?? 0) * 100, 2) }}%</h3>
                     <small>Recall</small>
                   </div>
                 </div>
                 <div class="col-3">
                   <div class="metric-card bg-light">
-                    <h3 class="text-success">{{ number_format(($d['macro_f1'] ?? 0) * 100, 1) }}%</h3>
+                    <h3 class="text-success">{{ number_format(($d['macro_f1'] ?? 0) * 100, 2) }}%</h3>
                     <small>F1-Score</small>
                   </div>
                 </div>
@@ -364,9 +369,68 @@
 </div>
 
 <script>
-document.getElementById('btnRun')?.addEventListener('click', function() {
+// Single-click scenario: uncheck all others, check this one, submit immediately
+document.querySelectorAll('.scenario-label').forEach(label => {
+  label.addEventListener('click', function(e) {
+    e.preventDefault();
+    const cb = this.querySelector('input.scenario-cb');
+    const allCbs = document.querySelectorAll('input.scenario-cb');
+    const allLabels = document.querySelectorAll('.scenario-label');
+
+    // If clicking an already-checked button, just toggle it off
+    if (cb.checked) {
+      cb.checked = false;
+      this.classList.remove('active', 'btn-primary');
+      this.classList.add('btn-outline-secondary');
+    } else {
+      // Uncheck all, then check only this one and submit
+      allCbs.forEach(c => { c.checked = false; });
+      allLabels.forEach(l => {
+        l.classList.remove('active', 'btn-primary');
+        l.classList.add('btn-outline-secondary');
+      });
+      cb.checked = true;
+      this.classList.add('active', 'btn-primary');
+      this.classList.remove('btn-outline-secondary');
+
+      // Auto-submit for single scenario
+      const btn = document.getElementById('btnRun');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menjalankan ' + cb.value + '...';
+      btn.closest('form').submit();
+    }
+  });
+});
+
+// Pilih Semua
+document.getElementById('btnSelectAll')?.addEventListener('click', function() {
+  document.querySelectorAll('input.scenario-cb').forEach(cb => { cb.checked = true; });
+  document.querySelectorAll('.scenario-label').forEach(l => {
+    l.classList.add('active', 'btn-primary');
+    l.classList.remove('btn-outline-secondary');
+  });
+});
+
+// Hapus Pilihan
+document.getElementById('btnDeselectAll')?.addEventListener('click', function() {
+  document.querySelectorAll('input.scenario-cb').forEach(cb => { cb.checked = false; });
+  document.querySelectorAll('.scenario-label').forEach(l => {
+    l.classList.remove('active', 'btn-primary');
+    l.classList.add('btn-outline-secondary');
+  });
+});
+
+// Jalankan Terpilih (multiple scenarios)
+document.getElementById('btnRun')?.addEventListener('click', function(e) {
+  const checked = document.querySelectorAll('input[name="scenarios[]"]:checked');
+  if (checked.length === 0) {
+    e.preventDefault();
+    alert('Pilih minimal 1 skenario terlebih dahulu.');
+    return;
+  }
   this.disabled = true;
-  this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menjalankan evaluasi (4 algoritma × 5 skenario)...';
+  const count = checked.length;
+  this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Menjalankan ' + count + ' skenario...';
   this.closest('form').submit();
 });
 </script>

@@ -418,7 +418,7 @@
                                                  style="width: {{ $ccScore * 100 }}%">
                                             </div>
                                         </div>
-                                        <small>{{ number_format($ccScore, 4) }}</small>
+                                        <small>{{ number_format(ceil($ccScore * 10000) / 10000, 4) }}</small>
                                     </div>
                                 </td>
                                 <td>{{ number_format((float)($ftRow->s_plus ?? 0), 6) }}</td>
